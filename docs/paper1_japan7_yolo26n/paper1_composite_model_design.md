@@ -2,18 +2,17 @@
 
 ## Current Signal
 
-`CPUBoneNano-P2Lite` has completed the 30 epoch signal experiment and is the current strongest Paper 1 single-module candidate.
+The Paper 1 signal ranking has changed after additional 30 epoch single-module experiments. `EMA_attention` is now the strongest single-module candidate, while `CPUBoneNano-P2Lite` remains the strongest shallow-detail/P2 candidate.
 
-Observed signal:
+30 epoch single-module signal:
 
-- mAP50 = 0.153
-- mAP50-95 = 0.0674
-- D10 mAP50 improved from 0 at 3 epochs to 0.0261 at 30 epochs
-- D43/D44/D20 show stronger behavior than the early pilot
-- Params = 3.672M
-- FLOPs = 6.6G
+| module | mAP50 | mAP50-95 | params | FLOPs | current decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| EMA_attention | 0.202 | 0.0884 | 2.377M | 5.2G | 100e formal |
+| CPUBoneNano-P2Lite | 0.153 | 0.0674 | 3.672M | 6.6G | 100e formal |
+| SPDConv | 0.129 | 0.0516 | 2.600M | 1.5G | optional 100e |
 
-This is enough to lock the P2/shallow-detail direction into the Paper 1 final candidate set.
+P2Lite still locks the shallow-detail direction into the Paper 1 candidate set. EMA now becomes the main single-module formal candidate.
 
 ## Why P2Lite Stays
 
@@ -23,25 +22,37 @@ The parameter and FLOPs increase is acceptable for the current paper story becau
 
 ## Why Add SPDConv
 
-D10 is still weak after P2Lite, even though the 30 epoch signal is positive. SPDConv-style downsampling is added to the bottom-up neck path to preserve local spatial detail when moving from P2 to P3/P4/P5.
+D10 remains weak after P2Lite, and SPDConv has a positive single-module signal. However, the current composite pilot shows that adding SPDConv in the present bottom-up position does not improve over P2Lite alone.
 
 The composite YAML expresses this as `space_to_depth + stride1 Conv` at each bottom-up downsampling step. This keeps the four-scale Detect inputs at P2, P3, P4, and P5.
 
 ## Why Add EMA Attention
 
-EMA_attention is retained as the lightweight attention branch to strengthen damage-region response and suppress background texture. It is placed on the final P5 fused feature before `Detect`, matching the existing standalone EMA candidate style while keeping the combination minimal.
+EMA_attention is retained as the lightweight attention branch because it is currently the strongest single-module result. In the existing composite YAMLs it is placed on the final P5 fused feature before `Detect`, matching the earlier standalone EMA insertion style.
 
-## Current Composite Candidate
+The 3 epoch composite result suggests this placement may not be optimal when combined with P2Lite. Future composite work should test alternative EMA insertion points instead of promoting the current composite directly.
 
-YAML:
+## Current Composite Candidates
+
+YAMLs:
+
+`ultralytics/cfg/models/26/yolo26-Paper1-P2Lite-EMA.yaml`
 
 `ultralytics/cfg/models/26/yolo26-Paper1-P2Lite-SPDConv-EMA.yaml`
 
-Design:
+3 epoch composite pilot:
 
-- Base: CPUBoneNano-P2Lite four-scale P2/P3/P4/P5 structure
-- SPDConv merge: `space_to_depth + Conv(stride=1)` in the bottom-up neck
-- EMA merge: one `EMA_attention` block before the P5 Detect input
-- Detect inputs: P2, P3, P4, P5
+| model | Recall | mAP50 | mAP50-95 | params | FLOPs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| P2Lite | 0.0714 | 0.000306 | 0.0000811 | 3.672M | 6.6G |
+| P2Lite + EMA | 0.0306 | 0.000128 | 0.0000280 | 3.673M | 6.6G |
+| P2Lite + SPDConv + EMA | 0.0601 | 0.000230 | 0.0000569 | 4.254M | 7.7G |
 
-This YAML is a buildability and smoke-test candidate only. It must not replace the single-module evidence chain until EMA_attention and SPDConv complete their own 30 epoch signal experiments.
+Decision:
+
+- Both composite YAMLs can train.
+- The three-module composite is better than `P2Lite + EMA`, but still below P2Lite alone.
+- Neither composite should enter 30 epoch or 100 epoch formal training in its current form.
+- Keep both YAMLs as exploration candidates for future insertion-position research.
+
+The current Paper 1 formal path should be `EMA_attention 100e`, `P2Lite 100e`, and optional `SPDConv 100e`.

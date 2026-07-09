@@ -42,9 +42,24 @@ The earlier high-level module stories remain valid only as long-term combination
 
 They must not be trained directly as three-module combinations. Run one module at a time first.
 
+Current Paper 1 signal decision:
+
+- `EMA_attention` is the strongest single-module signal and should enter 100 epoch formal evaluation.
+- `CPUBoneNano-P2Lite` is the second strongest signal and remains the shallow-detail/P2 main candidate for 100 epoch formal evaluation.
+- `SPDConv` is useful but lower priority; keep it as an optional 100 epoch single-module candidate.
+- Current composite YAMLs are trainable, but they should not enter 30 epoch or 100 epoch experiments yet.
+
 ## Paper 1 Route
 
 Paper 1 targets Japan7 single-domain detection. The focus is YOLO26n weakness on D00/D10 thin cracks, low contrast damage, and small road defects.
+
+30 epoch single-module ranking:
+
+| rank | module | mAP50 | mAP50-95 | params | FLOPs | decision |
+| ---: | --- | ---: | ---: | ---: | ---: | --- |
+| 1 | EMA_attention | 0.202 | 0.0884 | 2.377M | 5.2G | 100e formal |
+| 2 | CPUBoneNano-P2Lite | 0.153 | 0.0674 | 3.672M | 6.6G | 100e formal |
+| 3 | SPDConv | 0.129 | 0.0516 | 2.600M | 1.5G | optional 100e |
 
 First 3 epoch pilot batch:
 
@@ -93,6 +108,16 @@ The old `P2 + SPDConv + EMA` idea can only become a later combination if:
 - Pairwise combinations do not reduce mAP50-95.
 - Params/FLOPs/FPS still support a lightweight detection story.
 
+Current 3 epoch composite pilot result:
+
+| model | Recall | mAP50 | mAP50-95 | params | FLOPs | decision |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| P2Lite | 0.0714 | 0.000306 | 0.0000811 | 3.672M | 6.6G | keep as stronger single-module path |
+| P2Lite + EMA | 0.0306 | 0.000128 | 0.0000280 | 3.673M | 6.6G | do not promote |
+| P2Lite + SPDConv + EMA | 0.0601 | 0.000230 | 0.0000569 | 4.254M | 7.7G | trainable but do not promote |
+
+Both composite YAMLs can train, but neither beats P2Lite in the 3 epoch pilot. Keep them as exploration candidates only. Future composite work should revisit EMA and SPDConv insertion positions before any 30 epoch or 100 epoch run.
+
 ## Paper 2 Route
 
 Paper 2 uses Common4 cross-domain evaluation and must not reuse Japan7 seven-class results as the main table.
@@ -134,6 +159,7 @@ Deferred Paper 2 candidates:
 ## Do Not Do
 
 - Do not train `P2 + SPDConv + EMA` directly.
+- Do not promote current `P2Lite + EMA` or `P2Lite + SPDConv + EMA` composites to 30e/100e.
 - Do not train `HVI + ContextAggregation + hwd` directly.
 - Do not fix `CARAFE`, `FDConv`, or `ContextAggregation` on this branch.
 - Do not restore old stashes into this clean branch.
