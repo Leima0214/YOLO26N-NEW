@@ -88,6 +88,25 @@ python scripts/collect_results.py
 # Output: experiments/baseline_table.md
 ```
 
+## Module Scan Workflow (v2 branch)
+
+The `baseline/japan-baseline-engineering-v2` branch contains 105 YOLO26 model YAMLs. Before running any pilot training, filter buildable candidates:
+
+```bash
+# Step 1: Scan which YAMLs actually build
+python scripts/scan_yolo26_module_buildability.py
+# Output: experiments/module_scan/buildability_report.md
+
+# Step 2: 3-epoch pilot for each BUILD OK candidate
+python scripts/train_module_pilot.py \
+    --model-yaml ultralytics/cfg/models/26/yolo26-CBAM.yaml \
+    --data configs/japan7_remote.yaml --device 0
+# Output: experiments/module_scan/pilot_report.csv
+```
+
+Only candidates with mAP50 > 0.3 after 3 epochs proceed to 20-epoch signal tests.
+See [`docs/paper1_japan7_yolo26n/module_selection.md`](docs/paper1_japan7_yolo26n/module_selection.md) for full candidate list and priority order.
+
 ## Experiment plan
 
 | Paper | Protocol | Config | Description |
