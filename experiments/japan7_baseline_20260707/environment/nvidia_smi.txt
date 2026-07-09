@@ -1,0 +1,3 @@
+# nvidia-smi output was captured on the remote GPU server.
+# Run this on remote and append:
+#   nvidia-smi >> experiments/japan7_baseline_20260707/env/nvidia_smi.txt

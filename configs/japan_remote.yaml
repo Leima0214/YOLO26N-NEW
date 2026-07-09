@@ -1,0 +1,19 @@
+# Japan single-domain YOLO dataset (remote Linux GPU path)
+# TODO: confirm whether this dataset is 5-class or 10-class before training.
+#       Run: python scripts/check_dataset.py --data configs/japan_remote.yaml
+#       The script will auto-detect class IDs from labels/ and report any issues.
+
+path: /yolo26-probe/japan_yolo
+train: images/train
+val: images/val
+
+# nc and names below are FALLBACK — they will be OVERRIDDEN if a dataset.yaml
+# or data.yaml exists inside the dataset directory.  Always run check_dataset.py
+# before training to confirm the actual class count.
+nc: 5
+names:
+  0: D00
+  1: D10
+  2: D20
+  3: D40
+  4: D50

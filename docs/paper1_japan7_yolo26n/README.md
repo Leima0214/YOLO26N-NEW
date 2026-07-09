@@ -1,0 +1,23 @@
+# Paper 1: Lightweight Detail Enhancement for Road Crack Detection on YOLO26n
+
+**Target**: Domestic journal (3rd/4th tier)
+**Dataset**: Japan7 (7 classes)
+**Baseline branch**: `baseline/japan-baseline-engineering`
+**Improvement branch**: `feature/yolo26n-paper1`
+
+## Key documents
+
+| Document | Purpose |
+| --- | --- |
+| [paper1_plan.md](paper1_plan.md) | Overall paper plan and timeline |
+| [baseline_analysis.md](baseline_analysis.md) | Baseline results analysis and bottleneck identification |
+| [problem_motivation.md](problem_motivation.md) | Why YOLO26n needs improvement for crack detection |
+| [dataset_protocol.md](dataset_protocol.md) | Japan7 protocol definition and rationale |
+| [experiment_protocol.md](experiment_protocol.md) | Training and evaluation protocol |
+| [table_baseline.md](table_baseline.md) | Baseline results table |
+| [table_per_class.md](table_per_class.md) | Per-class results table |
+| [figure_plan.md](figure_plan.md) | Planned figures for the paper |
+| [ablation_plan.md](ablation_plan.md) | Ablation study design (B0–B5) |
+| [method_candidates.md](method_candidates.md) | Candidate improvement methods |
+| [writing_outline.md](writing_outline.md) | Paper writing outline |
+| [todo_next_experiments.md](todo_next_experiments.md) | Next experiments to run |

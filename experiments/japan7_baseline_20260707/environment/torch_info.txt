@@ -1,0 +1,3 @@
+# GPU server: NVIDIA with CUDA, device=0
+# Local (this commit): CPU-only, see pip_freeze.txt for exact versions
+torch==2.12.0+cpu (local) / GPU server version TBD (remote)

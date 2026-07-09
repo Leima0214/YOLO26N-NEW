@@ -1,0 +1,59 @@
+# Ultralytics AGPL-3.0 License - https://ultralytics.com/license
+
+# YOLO26 + CPUBone-nano P2 Lite backbone for small-object detection.
+# Paper: https://arxiv.org/abs/2603.26425
+# Code : https://github.com/altair199797/CPUBone
+#
+# Purpose:
+#   Optimized candidate for VisDrone. CPUBone exports P2/P3/P4/P5, and the
+#   detection neck uses four scales. P2 keeps high-resolution details for tiny
+#   pedestrians, bicycles, and vehicles while nano + projection-only adapters
+#   keep the double-100 experiment easier to optimize than b0.
+
+nc: 80
+end2end: True
+reg_max: 1
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # args: [variant, yolo_channels, in_chans, adapter_depth, use_context_adapter]
+  - [-1, 1, CPUBoneP2BackboneYOLO, [nano, [128, 256, 512, 1024], 3, 0, False]] # 0: [P2/4, P3/8, P4/16, P5/32]
+  - [0, 1, CPUBoneFeatureIndex, [0]] # 1-P2/4
+  - [0, 1, CPUBoneFeatureIndex, [1]] # 2-P3/8
+  - [0, 1, CPUBoneFeatureIndex, [2]] # 3-P4/16
+  - [0, 1, CPUBoneFeatureIndex, [3]] # 4-P5/32
+  - [4, 1, SPPF, [1024, 5, 3, True]] # 5
+  - [-1, 2, C2PSA, [1024]] # 6
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 3], 1, Concat, [1]]
+  - [-1, 2, C3k2, [512, True]] # 9 (P4/16)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 2], 1, Concat, [1]]
+  - [-1, 2, C3k2, [256, True]] # 12 (P3/8)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 1], 1, Concat, [1]]
+  - [-1, 2, C3k2, [128, True]] # 15 (P2/4-tiny)
+
+  - [-1, 1, Conv, [128, 3, 2]]
+  - [[-1, 12], 1, Concat, [1]]
+  - [-1, 2, C3k2, [256, True]] # 18 (P3/8-small)
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 9], 1, Concat, [1]]
+  - [-1, 2, C3k2, [512, True]] # 21 (P4/16-medium)
+
+  - [-1, 1, Conv, [512, 3, 2]]
+  - [[-1, 6], 1, Concat, [1]]
+  - [-1, 1, C3k2, [1024, True, 0.5, True]] # 24 (P5/32-large)
+
+  - [[15, 18, 21, 24], 1, Detect, [nc]]
+

@@ -1,0 +1,16 @@
+# Paper 1 — Japan7 single-domain baseline (local)
+# 7 active classes from Japan domain: D00/D10/D20/D40/D43/D44/D50
+
+path: F:/deeplearning/YOLO26-probe/datasets_derived/japan7
+train: images/train
+val: images/val
+
+nc: 7
+names:
+  0: D00
+  1: D10
+  2: D20
+  3: D40
+  4: D43
+  5: D44
+  6: D50

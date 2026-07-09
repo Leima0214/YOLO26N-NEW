@@ -1,0 +1,50 @@
+# YAML Structure Summary
+
+| File | Backbone | Head | Scales | Small Obj | Lightweight | Paper1 | Risk |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| yolo26-2D.yaml | 11 layers | 10 layers, Detect head | P3,P4,P5 | medium | high | high | low |
+| yolo26-4D.yaml | 11 layers | 19 layers, Detect head | P3,P4,P5 | high | high | high | low |
+| yolo26-AConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-ADown.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-AKConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-BiForm.yaml | 12 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-BiFPN.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-BiFPN1.yaml | 11 layers | 15 layers, Detect head | P3,P4,P5 | medium | high | medium | high |
+| yolo26-BoTNet.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-C2f_DySnakeConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-C2f_Faster.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-C3_Faster.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-CARAFE.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-CBAM.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-ContextAggregation.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-DASI.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-DSConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-DualConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-DWConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-EfficientNetv2.yaml | 14 layers | 15 layers, Detect head | P3,P4,P5 | medium | high | medium | high |
+| yolo26-EMA_attention.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-GhostConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-Glod.yaml | 10 layers | 19 layers, Detect head | P3,P4,P5 | medium | high | medium | high |
+| yolo26-GSConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-HorBlock,.yaml | 12 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-Involution.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-MDCR.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-Moblileone.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-MSFN.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-OREPA.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-PatchExpand.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-RepConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-RepLKNet.yaml | 5 layers | 15 layers, Detect head | P3,P4,P5 | medium | high | medium | high |
+| yolo26-RepViT.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | high |
+| yolo26-RFAConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-SEAttention.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-ShuffleNetV2.yaml | 9 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | high |
+| yolo26-SimA.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-slimneck.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-SPDConv.yaml | 12 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-StokenAttention.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-SwinTransformer.yaml | 11 layers | 14 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26-v10D.yaml | 11 layers | 13 layers, unknown head | 0 detection layers | low | high | medium | medium |
+| yolo26-vanillanet.yaml | 7 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
+| yolo26.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | high | low |
+| yolo26LDConv.yaml | 11 layers | 13 layers, Detect head | P3,P4,P5 | medium | high | medium | medium |
