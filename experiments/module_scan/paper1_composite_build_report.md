@@ -1,4 +1,4 @@
-# Paper 1 Composite Build Report
+# Paper 1 P2Lite-SPDConv-EMA Build Report
 
 Generated: 2026-07-09
 
@@ -8,6 +8,11 @@ Generated: 2026-07-09
 - Base: `yolo26-CPUBoneNano-P2Lite.yaml`
 - Added: SPDConv-style `space_to_depth + Conv(stride=1)` bottom-up downsampling
 - Added: one `EMA_attention` block before the final P5 Detect input
+- Role: enhancement candidate after `P2Lite + EMA`
+
+## Current Ranking Context
+
+30 epoch single-module signal now ranks `EMA_attention` first, `P2Lite` second, and `SPDConv` third. Therefore the main Paper 1 composite candidate is `P2Lite + EMA`; this three-module YAML is retained as the stronger enhancement candidate.
 
 ## Buildability
 
@@ -41,7 +46,7 @@ PY
 
 ## Remote GPU Commands
 
-1 epoch smoke:
+1 epoch smoke, batch 32:
 
 ```bash
 python scripts/train_module_pilot.py \
@@ -52,10 +57,10 @@ python scripts/train_module_pilot.py \
   --batch 32 \
   --device 0 \
   --workers 8 \
-  --name module_Paper1-P2Lite-SPDConv-EMA_japan7_e1_img640_b16_seed42
+  --name module_Paper1-P2Lite-SPDConv-EMA_japan7_e1_img640_b32_seed42
 ```
 
-3 epoch pilot:
+3 epoch pilot, batch 32:
 
 ```bash
 python scripts/train_module_pilot.py \
@@ -66,9 +71,9 @@ python scripts/train_module_pilot.py \
   --batch 32 \
   --device 0 \
   --workers 8 \
-  --name module_Paper1-P2Lite-SPDConv-EMA_japan7_e3_img640_b16_seed42
+  --name module_Paper1-P2Lite-SPDConv-EMA_japan7_e3_img640_b32_seed42
 ```
 
 ## Decision
 
-The composite YAML is buildable and ready for remote smoke/pilot only. Do not run 30 epoch or 100 epoch training until EMA_attention and SPDConv complete their own 30 epoch signal experiments.
+The composite YAML is buildable and ready for remote smoke/pilot only. Do not run 30 epoch or 100 epoch training until the `P2Lite + EMA` result is reviewed and the extra SPDConv complexity is justified.
