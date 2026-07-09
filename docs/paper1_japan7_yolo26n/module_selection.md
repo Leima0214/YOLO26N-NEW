@@ -1,6 +1,18 @@
 # Module Selection
 
-This branch is for building an auditable module queue, not for stacking modules.
+This branch records the module screening rules for YOLO26-probe. The current goal is an auditable Paper 1/Paper 2 candidate queue, not immediate module stacking.
+
+Do not modify Ultralytics core model code on this branch. Do not train. Do not restore old stashes. Do not fix `CARAFE`, `FDConv`, or `ContextAggregation` here; use a separate `fix/mmcv-compat-module-build` branch for that.
+
+## Current Scan Result
+
+The current buildability scan covers 13 YAML candidates:
+
+- Candidates: 13
+- Build OK: 10
+- Build failed: 3
+
+`BUILD OK` only means `yaml.safe_load()` and `YOLO(yaml)` can construct the model. It does not mean the module is effective.
 
 ## Protocols
 
@@ -16,112 +28,118 @@ Paper 2 uses Common4:
 - Classes: D00, D10, D20, D40
 - Source domain: Japan
 - Target domains: Czech, India, China_MB / United States if available
-- Strict DG: train=Japan_train, val=Japan_val, test=target domain
+- Strict DG: train=Japan_train, val=Japan_val, test=Czech/India/China_MB/United States
 - Loose transfer: train=Japan_train, val=target_val
 
 If target-domain validation selects `best.pt`, do not call it strict domain generalization.
 
-## Phase 1: Buildability
+## Long-Term Direction
 
-Run:
+The earlier high-level module stories remain valid only as long-term combination candidates:
 
-```bash
-python scripts/scan_yolo26_module_buildability.py
-```
+- Paper 1: `YOLO26n + P2-like shallow detail + SPDConv + EMA`
+- Paper 2: `YOLO26n + HVI + ContextAggregation + hwd / wavelet-frequency enhancement`
 
-Outputs:
+They must not be trained directly as three-module combinations. Run one module at a time first.
 
-- `experiments/module_scan/buildability_report.csv`
-- `experiments/module_scan/buildability_report.md`
+## Paper 1 Route
 
-Buildability means `yaml.safe_load()` succeeds and `YOLO(yaml)` constructs the model. It does not train.
+Paper 1 targets Japan7 single-domain detection. The focus is YOLO26n weakness on D00/D10 thin cracks, low contrast damage, and small road defects.
 
-## Phase 2: 3 Epoch Pilot
+First 3 epoch pilot batch:
 
-Run only `build_ok=True` YAMLs, one module per run:
+- `yolo26-EMA_attention.yaml`: lightweight attention for damage-region response and background texture suppression.
+- `yolo26-LaplacianConv.yaml`: edge/detail enhancement for D00/D10 crack boundaries.
+- `yolo26-BiFPN1.yaml`: lightweight multi-scale fusion with the smallest parameter increase among BiFPN variants.
 
-```bash
-python scripts/train_module_pilot.py \
-    --model-yaml ultralytics/cfg/models/26/yolo26-CBAM.yaml \
-    --data configs/japan7_remote.yaml \
-    --epochs 3 --imgsz 640 --batch 16 --device 0 --workers 8
-```
+Second 3 epoch pilot batch:
 
-Default run name:
+- `yolo26-SPDConv.yaml`: detail-preserving downsampling for small targets and thin cracks.
+- `yolo26-CPUBoneNano-P2Lite.yaml`: P2-like shallow detail path; useful but parameter increase is high.
+- `yolo26-FFAFusion-Neck.yaml`: neck feature fusion; backup multi-scale fusion direction.
 
-```text
-module_{module_name}_japan7_e3_img640_b16_seed42
-```
+Controls and backups:
 
-If that directory already exists, the script appends a timestamp to avoid overwriting old runs.
+- `SEAttention`: backup to EMA.
+- `CBAM`: traditional attention control, not the main innovation.
+- `BiFPN`: lower priority than `BiFPN1` because `BiFPN1` is lighter.
 
-Pilot checks:
+Frozen until a separate mmcv compatibility fix:
 
-- `results.csv` exists
-- `weights/best.pt` exists
-- `args.yaml` exists
-- OOM
-- NaN
-- training loss decreased
-- mAP50 is nonzero
-- Params/FLOPs are available when Ultralytics reports them
+- `yolo26-CARAFE.yaml`
+- `yolo26-FDConv.yaml`
+- `yolo26-ContextAggregation.yaml`
 
-Outputs:
+## Paper 1 Ablation
 
-- `experiments/module_scan/pilot_report.csv`
-- `experiments/module_scan/pilot_report.md`
-
-## Phase 3: 20/30 Epoch Signal
-
-Promote at most 3 modules. Priority order:
-
-1. Shallow detail / P2: `yolo26-CPUBoneNano-P2Lite.yaml`
-2. Lightweight attention: `yolo26-EMA_attention.yaml`, `yolo26-SEAttention.yaml`, `yolo26-CBAM.yaml`
-3. Edge/frequency/detail: `yolo26-LaplacianConv.yaml`, `yolo26-FDConv.yaml`
-4. Multi-scale fusion: `yolo26-CARAFE.yaml`, `yolo26-BiFPN.yaml`, `yolo26-FFAFusion-Neck.yaml`
-
-`CBAM` is a traditional attention control, not the main innovation. Official P2-style references must state that no direct `yolo26n.pt` pretrained-weight comparison is fair unless weights are aligned.
-
-## Phase 4: 100 Epoch Formal
-
-Only 1-2 single modules may enter formal training. Combination models wait until single modules show signal.
-
-Recommended ablation table:
+Do not start from a stacked model. Use this order:
 
 | ID | Model |
 | --- | --- |
 | B0 | YOLO26n baseline |
-| B1 | YOLO26n + shallow detail / P2 idea |
-| B2 | YOLO26n + EMA_attention |
-| B3 | YOLO26n + FDConv or LaplacianConv |
-| B4 | YOLO26n + shallow detail + best single module |
-| B5 | Ours-YOLO26n |
+| B1 | YOLO26n + EMA_attention |
+| B2 | YOLO26n + LaplacianConv |
+| B3 | YOLO26n + BiFPN1 |
+| B4 | YOLO26n + SPDConv |
+| B5 | YOLO26n + CPUBoneNano-P2Lite / P2-like shallow detail |
+| B6 | YOLO26n + best single module + best shallow detail module |
+| B7 | Ours-YOLO26n |
 
-Each formal row must record Params, FLOPs, FPS, P, R, mAP50, mAP50-95, D00/D10 AP50, D00/D10 AP50-95, `best.pt` path, `results.csv` path, `args.yaml` path, git commit, and command.
+The old `P2 + SPDConv + EMA` idea can only become a later combination if:
 
-## First Scan Candidates
+- The P2-like module works alone.
+- `SPDConv` works alone.
+- `EMA_attention` works alone.
+- Pairwise combinations do not reduce mAP50-95.
+- Params/FLOPs/FPS still support a lightweight detection story.
 
-Paper 1:
+## Paper 2 Route
 
-- `ultralytics/cfg/models/26/yolo26-CPUBoneNano-P2Lite.yaml`
-- `ultralytics/cfg/models/26/yolo26-CARAFE.yaml`
-- `ultralytics/cfg/models/26/yolo26-BiFPN.yaml`
-- `ultralytics/cfg/models/26/yolo26-BiFPN1.yaml`
-- `ultralytics/cfg/models/26/yolo26-EMA_attention.yaml`
-- `ultralytics/cfg/models/26/yolo26-SEAttention.yaml`
-- `ultralytics/cfg/models/26/yolo26-CBAM.yaml`
-- `ultralytics/cfg/models/26/yolo26-LaplacianConv.yaml`
-- `ultralytics/cfg/models/26/yolo26-FDConv.yaml`
-- `ultralytics/cfg/models/26/yolo26-SPDConv.yaml`
-- `ultralytics/cfg/models/26/yolo26-FFAFusion-Neck.yaml`
+Paper 2 uses Common4 cross-domain evaluation and must not reuse Japan7 seven-class results as the main table.
 
-Paper 2:
+Current first Paper 2 candidate:
 
-- `ultralytics/cfg/models/26/yolo26-HVIEnhanceStem.yaml`
-- `ultralytics/cfg/models/26/yolo26-FFAFusion-Neck.yaml`
-- `ultralytics/cfg/models/26/yolo26-ContextAggregation.yaml`
+- `yolo26-HVIEnhanceStem.yaml`: color/light robustness for cross-domain road scenes.
 
-Removed from the local candidate set:
+Deferred Paper 2 candidates:
 
-- Large transformer/backbone replacement variants
-- Module-zoo YAMLs outside the Paper 1 and Paper 2 candidate lists
+- `ContextAggregation`: currently build failed; needs mmcv compatibility work later.
+- `FDConv / hwd / wavelet-frequency enhancement`: not currently validated as a buildable Paper 2 candidate.
+- `HVI + ContextAggregation + hwd`: late-stage combination idea only, not a current direct training target.
+
+## Promotion Rules
+
+3 epoch pilot promotion requires:
+
+- completed status
+- no OOM
+- no NaN
+- `results.csv` exists
+- `weights/best.pt` exists
+- `args.yaml` exists
+- loss decreases normally
+- mAP50 is nonzero
+- Params/FLOPs do not explode
+
+20/30 epoch signal promotion requires:
+
+- mAP50-95 is not clearly worse than YOLO26n baseline trend
+- D00 or D10 has a positive signal
+- parameter increase is explainable
+- training is stable
+- the module has a clear paper narrative
+
+100 epoch formal is limited to at most 1-2 models. Prioritize clear D00/D10 improvement, stable mAP50-95, acceptable Params/FLOPs/FPS, and a defensible paper motivation.
+
+## Do Not Do
+
+- Do not train `P2 + SPDConv + EMA` directly.
+- Do not train `HVI + ContextAggregation + hwd` directly.
+- Do not fix `CARAFE`, `FDConv`, or `ContextAggregation` on this branch.
+- Do not restore old stashes into this clean branch.
+- Do not run all buildable modules for 100 epochs.
+- Do not treat `BUILD OK` as proof of effectiveness.
+- Do not judge only by total mAP; inspect D00/D10.
+- Do not mix Paper 1 Japan7 and Paper 2 Common4 in one main result table.
+- Do not commit `runs`, `datasets`, `.pt` weights, or large images.
+- Do not change model structure on the baseline branch.
