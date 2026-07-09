@@ -49,7 +49,7 @@ python scripts/train_module_pilot.py \
   --data configs/japan7_remote.yaml \
   --epochs 1 \
   --imgsz 640 \
-  --batch 16 \
+  --batch 32 \
   --device 0 \
   --workers 8 \
   --name module_Paper1-P2Lite-SPDConv-EMA_japan7_e1_img640_b16_seed42
@@ -63,7 +63,7 @@ python scripts/train_module_pilot.py \
   --data configs/japan7_remote.yaml \
   --epochs 3 \
   --imgsz 640 \
-  --batch 16 \
+  --batch 32 \
   --device 0 \
   --workers 8 \
   --name module_Paper1-P2Lite-SPDConv-EMA_japan7_e3_img640_b16_seed42
