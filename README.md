@@ -88,24 +88,34 @@ python scripts/collect_results.py
 # Output: experiments/baseline_table.md
 ```
 
-## Module Scan Workflow (v2 branch)
+## Module Scan Workflow
 
-The `baseline/japan-baseline-engineering-v2` branch contains 105 YOLO26 model YAMLs. Before running any pilot training, filter buildable candidates:
+Do not train the module zoo directly. First turn selected YOLO26 YAMLs into an auditable queue:
 
 ```bash
-# Step 1: Scan which YAMLs actually build
 python scripts/scan_yolo26_module_buildability.py
-# Output: experiments/module_scan/buildability_report.md
-
-# Step 2: 3-epoch pilot for each BUILD OK candidate
-python scripts/train_module_pilot.py \
-    --model-yaml ultralytics/cfg/models/26/yolo26-CBAM.yaml \
-    --data configs/japan7_remote.yaml --device 0
-# Output: experiments/module_scan/pilot_report.csv
 ```
 
-Only candidates with mAP50 > 0.3 after 3 epochs proceed to 20-epoch signal tests.
-See [`docs/paper1_japan7_yolo26n/module_selection.md`](docs/paper1_japan7_yolo26n/module_selection.md) for full candidate list and priority order.
+Outputs:
+
+- `experiments/module_scan/buildability_report.csv`
+- `experiments/module_scan/buildability_report.md`
+
+Only `build_ok=True` YAMLs may enter the 3 epoch Japan7 pilot, one YAML per run:
+
+```bash
+python scripts/train_module_pilot.py \
+    --model-yaml ultralytics/cfg/models/26/yolo26-CBAM.yaml \
+    --data configs/japan7_remote.yaml \
+    --epochs 3 --imgsz 640 --batch 16 --device 0 --workers 8
+```
+
+Pilot outputs append to:
+
+- `experiments/module_scan/pilot_report.csv`
+- `experiments/module_scan/pilot_report.md`
+
+The pilot script writes reproducibility files into each run directory. Do not commit `runs/`, `datasets/`, `best.pt`, `last.pt`, images, tokens, or keys. See [`docs/paper1_japan7_yolo26n/module_selection.md`](docs/paper1_japan7_yolo26n/module_selection.md).
 
 ## Experiment plan
 

@@ -107,7 +107,6 @@ from .transformer import (
     TransformerEncoderLayer,
     TransformerLayer,
 )
-from .moe import OptimizedMOE, OptimizedMOEImproved, MOE, ES_MOE, EfficientSpatialRouterMoE, ModularRouterExpertMoE, UltraOptimizedMoE, AdaptiveCapacityMoE, HyperSplitMoE, HyperFusedMoE, HyperUltimateMoE, UltimateOptimizedMoE
 __all__ = (
     "AIFI",
     "C1",
@@ -191,16 +190,4 @@ __all__ = (
     "YOLOESegment",
     "YOLOESegment26",
     "v10Detect",
-    "OptimizedMOE",
-    "OptimizedMOEImproved",
-    "MOE",
-    "EfficientSpatialRouterMoE",
-    "ModularRouterExpertMoE",
-    "ES_MOE",
-    "UltraOptimizedMoE",
-    "AdaptiveCapacityMoE",
-    "HyperSplitMoE",
-    "HyperFusedMoE",
-    "HyperUltimateMoE",
-    "UltimateOptimizedMoE",
 )

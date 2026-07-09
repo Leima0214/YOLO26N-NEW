@@ -1,0 +1,1 @@
+timestamp,yaml_path,run_name,run_dir,status,error_type,error_message_short,results_csv_exists,best_pt_exists,args_yaml_exists,oom,nan_detected,loss_decreased,map50_nonzero,map50,map50_95,params_if_available,flops_if_available,recommended_next_step

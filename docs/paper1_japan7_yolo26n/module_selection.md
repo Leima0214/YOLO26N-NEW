@@ -1,79 +1,127 @@
-# Module Selection for Paper 1 — YOLO26n Lightweight Detail Enhancement
+# Module Selection
 
-## Strategy
+This branch is for building an auditable module queue, not for stacking modules.
 
-**Do NOT stack modules.** Each candidate is evaluated as a single-variable change against YOLO26n baseline.
+## Protocols
 
-## Phase 1: Buildability Scan
+Paper 1 uses Japan7:
 
-Run `scripts/scan_yolo26_module_buildability.py` to filter candidates that actually build.
+- Classes: D00, D10, D20, D40, D43, D44, D50
+- Main metric: mAP50-95
+- Secondary metrics: mAP50, Precision, Recall, Params, FLOPs, FPS
+- Key classes: D00, D10
 
-Only YAMLs that produce `BUILD OK` proceed to pilot.
+Paper 2 uses Common4:
 
-## Phase 2: 3-Epoch Pilot
+- Classes: D00, D10, D20, D40
+- Source domain: Japan
+- Target domains: Czech, India, China_MB / United States if available
+- Strict DG: train=Japan_train, val=Japan_val, test=target domain
+- Loose transfer: train=Japan_train, val=target_val
 
-Run `scripts/train_module_pilot.py --model-yaml <YAML>` for each BUILD OK candidate.
+If target-domain validation selects `best.pt`, do not call it strict domain generalization.
 
-Promotion criteria to 20-epoch:
-- No OOM
-- No NaN
-- mAP50 > 0.3 after 3 epochs
-- mAP50-95 > 0.15 after 3 epochs
-- Loss decreasing monotonically
+## Phase 1: Buildability
 
-## Phase 3: 20-Epoch Signal Test
+Run:
 
-Only top 3 pilots. Compare against YOLO26n baseline (same 20 epochs).
+```bash
+python scripts/scan_yolo26_module_buildability.py
+```
 
-## Phase 4: 100-Epoch Formal
+Outputs:
 
-Only 1–2 modules, in this order:
+- `experiments/module_scan/buildability_report.csv`
+- `experiments/module_scan/buildability_report.md`
 
-| B# | Model | Description |
-| --- | --- | --- |
-| B0 | YOLO26n | Baseline (already done) |
-| B1 | YOLO26n + P2/4D | Shallow detail branch |
-| B2 | YOLO26n + EMA | Lightweight attention |
-| B3 | YOLO26n + FDConv | Frequency detail enhancement |
-| B4 | YOLO26n + P2 + best module | Combination |
-| B5 | Ours-YOLO26n | Final |
+Buildability means `yaml.safe_load()` succeeds and `YOLO(yaml)` constructs the model. It does not train.
 
-## Candidate Priority
+## Phase 2: 3 Epoch Pilot
 
-### Tier 1 — Shallow Detail (P2)
+Run only `build_ok=True` YAMLs, one module per run:
 
-| YAML | Status | Notes |
-| --- | --- | --- |
-| `yolo26-4D.yaml` | Clean, standard-only modules | P2 detection head. Most fair comparison. |
-| `yolo26-CPUBoneNano-P2Lite.yaml` | Custom backbone | P2 + CPU-optimized backbone. Less fair. |
+```bash
+python scripts/train_module_pilot.py \
+    --model-yaml ultralytics/cfg/models/26/yolo26-CBAM.yaml \
+    --data configs/japan7_remote.yaml \
+    --epochs 3 --imgsz 640 --batch 16 --device 0 --workers 8
+```
 
-### Tier 2 — Lightweight Attention
+Default run name:
 
-| YAML | Priority | Notes |
-| --- | --- | --- |
-| `yolo26-EMA_attention.yaml` | ⭐⭐⭐ | EMA: cross-channel + spatial encoding |
-| `yolo26-SEAttention.yaml` | ⭐⭐ | SE: pure channel attention, 0 params |
-| `yolo26-CBAM.yaml` | ⭐ | Classic spatial+channel, widely known |
+```text
+module_{module_name}_japan7_e3_img640_b16_seed42
+```
 
-### Tier 3 — Edge / Frequency Detail
+If that directory already exists, the script appends a timestamp to avoid overwriting old runs.
 
-| YAML | Priority | Notes |
-| --- | --- | --- |
-| `yolo26-LaplacianConv.yaml` | ⭐⭐⭐ | Edge-aware convolution |
-| `yolo26-FDConv.yaml` | ⭐⭐ | Frequency-domain convolution |
+Pilot checks:
 
-### Tier 4 — Multi-Scale Fusion
+- `results.csv` exists
+- `weights/best.pt` exists
+- `args.yaml` exists
+- OOM
+- NaN
+- training loss decreased
+- mAP50 is nonzero
+- Params/FLOPs are available when Ultralytics reports them
 
-| YAML | Priority | Notes |
-| --- | --- | --- |
-| `yolo26-CARAFE.yaml` | ⭐⭐⭐ | Content-aware upsampling |
-| `yolo26-BiFPN.yaml` | ⭐⭐ | Weighted bidirectional FPN |
-| `yolo26-SPDConv.yaml` | ⭐⭐ | Space-to-depth, detail-preserving downsampling |
+Outputs:
 
-## Skipped (not in scope)
+- `experiments/module_scan/pilot_report.csv`
+- `experiments/module_scan/pilot_report.md`
 
-- All Mamba variants — too new for domestic journals
-- SwinTransformer — too heavy for lightweight narrative
-- MoE / NAS / SAM — experimental, not interpretable
-- FFAFusion series — unknown module registration
-- ECCV2026 / CVPR2026 series — author submission experiments
+## Phase 3: 20/30 Epoch Signal
+
+Promote at most 3 modules. Priority order:
+
+1. Shallow detail / P2: `yolo26-CPUBoneNano-P2Lite.yaml`
+2. Lightweight attention: `yolo26-EMA_attention.yaml`, `yolo26-SEAttention.yaml`, `yolo26-CBAM.yaml`
+3. Edge/frequency/detail: `yolo26-LaplacianConv.yaml`, `yolo26-FDConv.yaml`
+4. Multi-scale fusion: `yolo26-CARAFE.yaml`, `yolo26-BiFPN.yaml`, `yolo26-FFAFusion-Neck.yaml`
+
+`CBAM` is a traditional attention control, not the main innovation. Official P2-style references must state that no direct `yolo26n.pt` pretrained-weight comparison is fair unless weights are aligned.
+
+## Phase 4: 100 Epoch Formal
+
+Only 1-2 single modules may enter formal training. Combination models wait until single modules show signal.
+
+Recommended ablation table:
+
+| ID | Model |
+| --- | --- |
+| B0 | YOLO26n baseline |
+| B1 | YOLO26n + shallow detail / P2 idea |
+| B2 | YOLO26n + EMA_attention |
+| B3 | YOLO26n + FDConv or LaplacianConv |
+| B4 | YOLO26n + shallow detail + best single module |
+| B5 | Ours-YOLO26n |
+
+Each formal row must record Params, FLOPs, FPS, P, R, mAP50, mAP50-95, D00/D10 AP50, D00/D10 AP50-95, `best.pt` path, `results.csv` path, `args.yaml` path, git commit, and command.
+
+## First Scan Candidates
+
+Paper 1:
+
+- `ultralytics/cfg/models/26/yolo26-CPUBoneNano-P2Lite.yaml`
+- `ultralytics/cfg/models/26/yolo26-CARAFE.yaml`
+- `ultralytics/cfg/models/26/yolo26-BiFPN.yaml`
+- `ultralytics/cfg/models/26/yolo26-BiFPN1.yaml`
+- `ultralytics/cfg/models/26/yolo26-EMA_attention.yaml`
+- `ultralytics/cfg/models/26/yolo26-SEAttention.yaml`
+- `ultralytics/cfg/models/26/yolo26-CBAM.yaml`
+- `ultralytics/cfg/models/26/yolo26-LaplacianConv.yaml`
+- `ultralytics/cfg/models/26/yolo26-FDConv.yaml`
+- `ultralytics/cfg/models/26/yolo26-SPDConv.yaml`
+- `ultralytics/cfg/models/26/yolo26-FFAFusion-Neck.yaml`
+
+Paper 2:
+
+- `ultralytics/cfg/models/26/yolo26-HVIEnhanceStem.yaml`
+- `ultralytics/cfg/models/26/yolo26-FFAFusion-Neck.yaml`
+- `ultralytics/cfg/models/26/yolo26-ContextAggregation.yaml`
+
+Removed from the local candidate set:
+
+- Large transformer/backbone replacement variants
+- Module-zoo YAMLs outside the Paper 1 and Paper 2 candidate lists

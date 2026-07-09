@@ -1,6 +1,7 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import contextlib
+import importlib
 import pickle
 import re
 import types
@@ -9,41 +10,25 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from ultralytics.nn. SwinTransformer import SwinTransformer
-from ultralytics.nn. Involution import Involution
-from ultralytics.nn.LDConv import LDConv
-from ultralytics.nn.StokenAttention import StokenAttention
 from ultralytics.nn.autobackend import check_class_names
-from ultralytics.nn.vanillanet import vanillanetBlock
-from ultralytics.nn.FDConv import FDConv
-from ultralytics.nn.DCAFE import DCAFEConv
-from ultralytics.nn.LaplacianConv import LaplacianConv
-from ultralytics.nn.EfficientNetv23 import PAMBConv,FusedMBConv,stem
 from ultralytics.nn.modules import (
-    AIFI,
-    C1,
-    C2,
-    C2PSA,
-    C3,
-    C3TR,
-    ELAN1,
-    OBB,
-    OBB26,
-    PSA,
-    SPP,
-    SPPELAN,
-    SPPF,
     A2C2f,
     AConv,
     ADown,
+    AIFI,
     Bottleneck,
     BottleneckCSP,
+    C1,
+    C2,
     C2f,
     C2fAttn,
     C2fCIB,
     C2fPSA,
+    C2PSA,
+    C3,
     C3Ghost,
     C3k2,
+    C3TR,
     C3x,
     CBFuse,
     CBLinear,
@@ -55,6 +40,7 @@ from ultralytics.nn.modules import (
     Detect,
     DWConv,
     DWConvTranspose2d,
+    ELAN1,
     Focus,
     GhostBottleneck,
     GhostConv,
@@ -63,8 +49,11 @@ from ultralytics.nn.modules import (
     ImagePoolingAttn,
     Index,
     LRPCHead,
+    OBB,
+    OBB26,
     Pose,
     Pose26,
+    PSA,
     RepC3,
     RepConv,
     RepNCSPELAN4,
@@ -72,112 +61,20 @@ from ultralytics.nn.modules import (
     ResNetLayer,
     RTDETRDecoder,
     SCDown,
-    SAMAdapterInject,
-    SAMAuxBranchFusion,
     Segment,
     Segment26,
+    SPP,
+    SPPELAN,
+    SPPF,
     TorchVision,
     WorldDetect,
     YOLOEDetect,
     YOLOESegment,
     YOLOESegment26,
     v10Detect,
-    ModularRouterExpertMoE
 )
-from ultralytics.nn.yolo26_latest2d import (
-    DFINEDistributionRefine,
-    FTFSODReweight,
-    LWDETRTokenMixer,
-    MambaYOLORGBlock,
-    PKIBlock,
-    RFDETRNASBlock,
-    RTDETRv2HybridEncoder,
-    YOLOERepRTA,
-    YOLOv10CIBLite,
-    YOLOv12AreaAttention,
-)
-from ultralytics.nn.yolo26_cvpr_improvements import (
-    HVIEnhanceStem,
-    MSHCBlock,
-    SMLPBlock,
-    StarBlock,
-    StarDown,
-    StarStem,
-)
-from ultralytics.nn.yolo26_2026_adapters import DRoRAEBlock, MVSplitBlock, UpsampleAnything, VECABlock, XRestormerPPBlock
-from ultralytics.nn.yolo26_cvpr_backbones import AKCMambaStage, EgoCSStage, LSNetStage
-from ultralytics.nn.yolo26_2025_backbones import (
-    EfficientViMBackboneYOLO,
-    EfficientViMBackboneStage,
-    EfficientViMStage,
-    MobileMambaBackboneYOLO,
-    MobileMambaBackboneStage,
-    MobileMambaStage,
-    OverLoCKBackboneYOLO,
-    OverLoCKBackboneStage,
-    OverLoCKStage,
-    TinyViMBackboneYOLO,
-    TinyViMBackboneStage,
-    TinyViMStage,
-    VisionBackboneFeatureIndex,
-)
-from ultralytics.nn.yolo26_ffafusion import FFAFusionBlock, FFAFusionConcat, FFAFusionDetect
-from ultralytics.nn.yolo26_rgbir import (
-    RGBIRDynamicFusion,
-    RGBIRDualC2PSA,
-    RGBIRDualC3k2,
-    RGBIRDualConv,
-    RGBIRDualSPPF,
-    RGBIRSplit,
-    RGBIRStem,
-)
-from ultralytics.nn.yolo26_microvitv2 import (
-    MicroFeatureIndex,
-    MicroViTv2AdapterYOLO,
-    MicroViTv2BackboneYOLO,
-    MicroViTv2Block,
-    MicroViTv2Stage,
-)
-from ultralytics.nn.yolo26_cpubone2026 import (
-    CPUBoneBackboneYOLO,
-    CPUBoneBlock,
-    CPUBoneFeatureIndex,
-    CPUBoneP2BackboneYOLO,
-    CPUBoneStableBlock,
-)
-from ultralytics.nn.yolo26_mit_dlinoss2025 import AxialLinOSSScan, DLinOSSBackboneBlock, LinOSSNeckFusion
-from ultralytics.nn.yolo26_eccv2026 import (
-    PriorEyeBlock,
-    PriorEyeC2f,
-    PriorEyeDetectAdapter,
-    PriorEyeScaleSelect,
-    PriorEyeStem,
-    S2FracMixBlock,
-    S2FracMixC2f,
-    S2FracMixFusion,
-)
-from ultralytics.nn.se import SEAttention
-from ultralytics.nn.spdconv import space_to_depth
-from ultralytics.nn.ShuffleNetV2 import ShuffleNetV2, Conv_maxpool
-from ultralytics.nn. MobileOne import MobileOneBlock
 from ultralytics.utils import DEFAULT_CFG_DICT, LOGGER, YAML, colorstr, emojis
-from ultralytics.nn.BiFormer import BiLevelRoutingAttention,Attention,AttentionLePE
-from ultralytics.nn.AKConv import AKConv
-from ultralytics.nn.PatchExpand import PatchExpand
-from ultralytics.nn.orepa import OREPA
-from ultralytics.nn. HorBlock import HorBlock
-from ultralytics.nn.RepConv import RepConv
-from ultralytics.nn.RFAConv import RFAConv
-from ultralytics.nn.RepViTblock import RepViTblock
-from ultralytics.nn.AIxueshujiaojiaoshou import *
-from ultralytics.nn.Glod import  IFM,SimFusion_3in,SimFusion_4in,InjectionMultiSum_Auto_pool,PyramidPoolAgg,TopBasicLayer,AdvPoolFusion
-from ultralytics.nn. EfficientNetv2 import MBConv,FusedMBConv,stem
-from ultralytics.nn.EMA_attention import EMA_attention
-from ultralytics.nn.ODConv import ODConv
-from ultralytics.nn. RepLKNet import RepLKNet_Stem, RepLKNet_stage1, RepLKNet_stage2, RepLKNet_stage3, RepLKNet_stage4
-from ultralytics.nn.CARAFE import CARAFE#详细改进流程和操作，请关注B站博主：Ai学术叫叫兽 er,畅享一对一指点迷津，已指导无数家人拿下学术硕果！！！
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
-from ultralytics.nn. SlimNeck import VoVGSCSP, VoVGSCSPC, GSConv
 from ultralytics.utils.loss import (
     E2ELoss,
     PoseLoss26,
@@ -187,17 +84,9 @@ from ultralytics.utils.loss import (
     v8PoseLoss,
     v8SegmentationLoss,
 )
-from ultralytics.nn.C2f_Faster import C2f_Faster,C3_Faster
-from ultralytics.nn.CAFMAttention import CAFMAttention
-from ultralytics.nn.BoTNet import BoTNet
 from ultralytics.utils.ops import make_divisible
 from ultralytics.utils.patches import torch_load
-from ultralytics.nn.DSConv import DSConv,DySnakeConv,C2f_DySnakeConv,Bottleneck_DySnakeConv
 from ultralytics.utils.plotting import feature_visualization
-from ultralytics.nn.CBAM import CBAM
-from ultralytics.nn.CBAM1 import CBAM1
-from ultralytics.nn.AIxueshujiaojiaoshou import *
-from ultralytics.nn.ContextAggregation import ContextAggregation
 from ultralytics.utils.torch_utils import (
     fuse_conv_and_bn,
     fuse_deconv_and_bn,
@@ -209,7 +98,32 @@ from ultralytics.utils.torch_utils import (
     time_sync,
 )
 
-from ultralytics.nn.v9 import SPPELAN,ADown,AConv,Concat_bifpn
+from ultralytics.nn.v9 import Concat_bifpn
+
+CUSTOM_MODULE_IMPORTS = {
+    "CARAFE": ("ultralytics.nn.CARAFE", "CARAFE"),
+    "CBAM": ("ultralytics.nn.CBAM", "CBAM"),
+    "ContextAggregation": ("ultralytics.nn.ContextAggregation", "ContextAggregation"),
+    "CPUBoneFeatureIndex": ("ultralytics.nn.yolo26_cpubone2026", "CPUBoneFeatureIndex"),
+    "CPUBoneP2BackboneYOLO": ("ultralytics.nn.yolo26_cpubone2026", "CPUBoneP2BackboneYOLO"),
+    "EMA_attention": ("ultralytics.nn.EMA_attention", "EMA_attention"),
+    "FDConv": ("ultralytics.nn.FDConv", "FDConv"),
+    "FFAFusionConcat": ("ultralytics.nn.yolo26_ffafusion", "FFAFusionConcat"),
+    "HVIEnhanceStem": ("ultralytics.nn.yolo26_cvpr_improvements", "HVIEnhanceStem"),
+    "LaplacianConv": ("ultralytics.nn.LaplacianConv", "LaplacianConv"),
+    "SEAttention": ("ultralytics.nn.se", "SEAttention"),
+    "space_to_depth": ("ultralytics.nn.spdconv", "space_to_depth"),
+}
+
+
+def resolve_custom_module(name):
+    module_name, attr_name = CUSTOM_MODULE_IMPORTS[name]
+    module = importlib.import_module(module_name)
+    cls = getattr(module, attr_name)
+    globals()[name] = cls
+    return cls
+
+
 class BaseModel(torch.nn.Module):
     """Base class for all YOLO models in the Ultralytics family.
 
@@ -1662,91 +1576,55 @@ def parse_model(d, ch, verbose=True):
     base_modules = frozenset(
         {
             Classify,
-            Conv,HorBlock,
+            Conv,
             ConvTranspose,
-            GhostConv,RFAConv,
+            GhostConv,
             Bottleneck,
-            GhostBottleneck,SEAttention,
+            GhostBottleneck,
             SPP,
             SPPF,
-            C2fPSA,Involution,
+            C2fPSA,
             C2PSA,
-            DWConv,DASI,PAMBConv,
+            DWConv,
             Focus,
-            BottleneckCSP,DualConv,
-            C1,MBConv,FusedMBConv,stem,
-            C2,ContextAggregation,
-            C2f,VoVGSCSP, VoVGSCSPC,GSConv,LDConv,
-            C3k2,MDCR,
-            RepNCSPELAN4,MSFN,
-            ELAN1,CARAFE,CBAM,
-            ADown,EMA_attention,
-            AConv,MobileOneBlock,
-            SPPELAN,CAFMAttention,LaplacianConv,
-            C2fAttn,RepConv,
-            C3,BoTNet,RepViTblock,
+            BottleneckCSP,
+            C1,
+            C2,
+            C2f,
+            C3k2,
+            RepNCSPELAN4,
+            ELAN1,
+            ADown,
+            AConv,
+            SPPELAN,
+            C2fAttn,
+            RepConv,
+            C3,
             C3TR,
-            C3Ghost,C2f_Faster,C3_Faster,
-            DSConv, DySnakeConv, C2f_DySnakeConv, Bottleneck_DySnakeConv,
+            C3Ghost,
             torch.nn.ConvTranspose2d,
             DWConvTranspose2d,
-            C3x,FDConv,DCAFEConv,
-            RepC3,AKConv,
-            PSA,SwinTransformer,
+            C3x,
+            RepC3,
+            PSA,
             SCDown,
-            SAMAdapterInject,
-            SAMAuxBranchFusion,
             C2fCIB,
-
             A2C2f,
-            ModularRouterExpertMoE,
-            DFINEDistributionRefine,
-            FTFSODReweight,
-            LWDETRTokenMixer,
-            MambaYOLORGBlock,
-            PKIBlock,CBAM1,
-            RFDETRNASBlock,
-            RTDETRv2HybridEncoder,
-            YOLOERepRTA,
-            YOLOv10CIBLite,
-            YOLOv12AreaAttention,
-            HVIEnhanceStem,
-            FFAFusionBlock,
-            DRoRAEBlock,
-            AKCMambaStage,
-            EgoCSStage,
-            EfficientViMBackboneStage,
-            EfficientViMStage,
-            LSNetStage,
-            MobileMambaBackboneStage,
-            MobileMambaStage,
-            OverLoCKBackboneStage,
-            OverLoCKStage,
-            TinyViMBackboneStage,
-            TinyViMStage,
-            AxialLinOSSScan,
-            DLinOSSBackboneBlock,
-            LinOSSNeckFusion,
-            MicroViTv2Block,
-            MicroViTv2Stage,
-            MVSplitBlock,
-            MSHCBlock,
-            SMLPBlock,
-            StarBlock,
-            StarDown,
-            StarStem,
-            UpsampleAnything,
-            VECABlock,
-            XRestormerPPBlock,
-            PriorEyeBlock,
-            PriorEyeC2f,
-            PriorEyeDetectAdapter,
-            PriorEyeStem,
-            S2FracMixBlock,
-            S2FracMixC2f,
         }
     )
-    repeat_modules = frozenset(  # modules with 'repeat' arguments
+    base_module_names = frozenset(
+        {
+            "CARAFE",
+            "CBAM",
+            "ContextAggregation",
+            "EMA_attention",
+            "FDConv",
+            "HVIEnhanceStem",
+            "LaplacianConv",
+            "SEAttention",
+        }
+    )
+    repeat_modules = frozenset(
         {
             BottleneckCSP,
             C1,
@@ -1763,55 +1641,23 @@ def parse_model(d, ch, verbose=True):
             C2fCIB,
             C2PSA,
             A2C2f,
-            AKCMambaStage,
-            EgoCSStage,
-            EfficientViMBackboneStage,
-            EfficientViMStage,
-            LSNetStage,
-            MobileMambaBackboneStage,
-            MobileMambaStage,
-            OverLoCKBackboneStage,
-            OverLoCKStage,
-            TinyViMBackboneStage,
-            TinyViMStage,
-            PriorEyeC2f,
-            S2FracMixC2f,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
+        module_name = m
         m = (
             getattr(torch.nn, m[3:])
             if "nn." in m
             else getattr(__import__("torchvision").ops, m[16:])
             if "torchvision.ops." in m
-            else globals()[m]
+            else globals().get(m) or resolve_custom_module(m)
         )  # get module
         for j, a in enumerate(args):
             if isinstance(a, str):
                 with contextlib.suppress(ValueError):
                     args[j] = locals()[a] if a in locals() else ast.literal_eval(a)
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
-        if m in {RGBIRStem, RGBIRDualConv, RGBIRDualC3k2, RGBIRDualSPPF, RGBIRDualC2PSA, RGBIRDynamicFusion}:
-            c1, c2 = ch[f], args[0]
-            if c2 != nc:
-                c2 = make_divisible(min(c2, max_channels) * width, 8)
-            if m is RGBIRDualC3k2:
-                legacy = False
-                args = [c1, c2, n, *args[1:]]
-                if scale in "mlx" and len(args) > 3:
-                    args[3] = True
-                n = 1
-                c2 = 2 * c2
-            elif m is RGBIRDualC2PSA:
-                args = [c1, c2, n, *args[1:]]
-                n = 1
-                c2 = 2 * c2
-            elif m in {RGBIRStem, RGBIRDualConv, RGBIRDualSPPF}:
-                args = [c1, c2, *args[1:]]
-                c2 = 2 * c2
-            else:
-                args = [c1, c2, *args[1:]]
-        elif m in base_modules:
+        if m in base_modules or module_name in base_module_names:
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 != nc (e.g., Classify() output)
                 c2 = make_divisible(min(c2, max_channels) * width, 8)
@@ -1833,72 +1679,26 @@ def parse_model(d, ch, verbose=True):
                     args.extend((True, 1.2))
             if m is C2fCIB:
                 legacy = False
-        elif m is MobileOneBlock:
-            c1, c2 = ch[f], args[0]
-            c2 = make_divisible(c2 * width, 8)
-            args = [c1, c2, n, *args[1:]]
-        elif m in {Attention,AttentionLePE,BiLevelRoutingAttention}:
-            c2 = ch[f]
-            args=[c2,*args]
-        elif m in [RepLKNet_Stem, RepLKNet_stage1, RepLKNet_stage2, RepLKNet_stage3, RepLKNet_stage4]:
-            c2 = args[0] #详细改进流程和操作，请关注B站博主：Ai学术叫叫兽 er,畅享一对一指点迷津，已指导无数家人拿下学术硕果！！！
-            args = args[1:]
-        elif m in [OREPA]:
-            c2 = ch[f]
-            args = [ch[f], *args]
         elif m is AIFI:
             args = [ch[f], *args]
-        elif m in [ODConv]:
-            c1, c2 = ch[f], args[0]
-            if c2 != nc:  # if not output
-                c2 = make_divisible(c2 * width, 8)
-            args = [c1, c2, *args[1:]]
         elif m in frozenset({HGStem, HGBlock}):
             c1, cm, c2 = ch[f], args[0], args[1]
             args = [c1, cm, c2, *args[2:]]
             if m is HGBlock:
                 args.insert(4, n)  # number of repeats
                 n = 1
-        elif m in {SimFusion_4in, AdvPoolFusion}:
-            c2 = sum(ch[x] for x in f)
-        elif m is SimFusion_3in:
-            c2 = args[0]
-            if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
-                c2 = make_divisible(min(c2, max_channels) * width, 8)
-            args = [[ch[f_] for f_ in f], c2]
-        elif m is IFM: #详细改进流程和操作，请关注B站博主：Ai学术叫叫兽 er,畅享一对一指点迷津，已指导无数家人拿下学术硕果！！！
-            c1 = ch[f]
-            c2 = sum(args[0])
-            args = [c1, *args]
         elif m is ResNetLayer:
             c2 = args[1] if args[3] else args[1] * 4
-        elif m in [ShuffleNetV2,Conv_maxpool]:
-            c1, c2 = ch[f], args[0]
-            if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
-                c2 = make_divisible(c2 * width, 8)
-            args = [c1, c2, *args[1:]]
-        elif m is PatchExpand:
-            args = [ch[f], *args]
-            c2 = ch[f] // 2
-        elif m in [SimAM]:
-            c2 = ch[f]
-            args = [c2, *args]
         elif m is torch.nn.BatchNorm2d:
             args = [ch[f]]
-        elif m is FFAFusionConcat:
+        elif module_name == "FFAFusionConcat":
             c2 = sum(ch[x] for x in f)
             args = [[ch[x] for x in f], *args]
-        elif m in {S2FracMixFusion, PriorEyeScaleSelect}:
-            c2 = args[0]
-            if c2 != nc:
-                c2 = make_divisible(min(c2, max_channels) * width, 8)
-            args = [[ch[x] for x in f], c2, *args[1:]]
         elif m in {Concat, Concat_bifpn}:
             c2 = sum(ch[x] for x in f)
         elif m in frozenset(
             {
                 Detect,
-                FFAFusionDetect,
                 WorldDetect,
                 YOLOEDetect,
                 Segment,
@@ -1916,7 +1716,6 @@ def parse_model(d, ch, verbose=True):
                 args[2] = make_divisible(min(args[2], max_channels) * width, 8)
             if m in {
                 Detect,
-                FFAFusionDetect,
                 YOLOEDetect,
                 Segment,
                 Segment26,
@@ -1938,51 +1737,17 @@ def parse_model(d, ch, verbose=True):
             c2 = args[0]
             c1 = ch[f]
             args = [c1, c2, *args[1:]]
-        elif m is PatchExpand:
-            args = [ch[f], *args]
-            c2 = ch[f] // 2
-        elif m is vanillanetBlock:
-             c1, c2 = ch[f], args[0]
-             if c2 != torch.NoneType:
-                 c2 = make_divisible(c2 * width, 8)
-             args = [c1, c2, *args[1:]]
         elif m is CBFuse:
             c2 = ch[f[-1]]
-        elif m is InjectionMultiSum_Auto_pool:
-            c1 = ch[f[0]]
-            c2 = args[0]
-            args = [c1, *args]
-        elif m is PyramidPoolAgg:
-            c2 = args[0]
-            args = [sum([ch[f_] for f_ in f]), *args]
-        elif m is TopBasicLayer:
-            c2 = sum(args[1])
-        elif m is space_to_depth:
+        elif module_name == "space_to_depth":
             c2 = 4 * ch[f]
-        elif m is StokenAttention:
-            c2 = ch[f]
-            args = [c2, *args]
-        elif m in frozenset({CPUBoneBlock, CPUBoneStableBlock}):
-            c2 = ch[f]
-            args = [c2, *args]
-        elif m in frozenset(
-            {
-                MicroViTv2BackboneYOLO,
-                MicroViTv2AdapterYOLO,
-                CPUBoneBackboneYOLO,
-                CPUBoneP2BackboneYOLO,
-                EfficientViMBackboneYOLO,
-                MobileMambaBackboneYOLO,
-                TinyViMBackboneYOLO,
-                OverLoCKBackboneYOLO,
-            }
-        ):
+        elif module_name == "CPUBoneP2BackboneYOLO":
             raw_channels = args[1] if len(args) > 1 and isinstance(args[1], (list, tuple)) else [256, 512, 1024]
             c2 = [make_divisible(min(c, max_channels) * width, 8) for c in raw_channels]
             if len(args) > 1 and isinstance(args[1], (list, tuple)):
                 args[1] = c2
             args = [*args]
-        elif m in frozenset({MicroFeatureIndex, CPUBoneFeatureIndex, VisionBackboneFeatureIndex}):
+        elif module_name == "CPUBoneFeatureIndex":
             c1 = ch[f]
             c2 = c1[args[0]] if isinstance(c1, (list, tuple)) else c1
             args = [*args]

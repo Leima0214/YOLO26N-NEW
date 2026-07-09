@@ -1,86 +1,250 @@
 #!/usr/bin/env python3
-"""
-train_module_pilot.py — 3-epoch pilot training for a single YOLO26 variant YAML.
+"""Run one 3-epoch YOLO26 module pilot and append a report row."""
 
-Usage:
-    python scripts/train_module_pilot.py \
-        --model-yaml ultralytics/cfg/models/26/yolo26-CBAM.yaml \
-        --data configs/japan7_remote.yaml \
-        --device 0
-
-Output naming:
-    module_CBAM_japan7_e3_img640_b16_seed42
-
-Records:
-    experiments/module_scan/pilot_report.csv
-"""
+from __future__ import annotations
 
 import argparse
 import csv
+import math
+import shutil
+import subprocess
 import sys
-import traceback
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-OUT_DIR = Path("experiments/module_scan")
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+OUT_DIR = ROOT / "experiments" / "module_scan"
 PILOT_CSV = OUT_DIR / "pilot_report.csv"
+PILOT_MD = OUT_DIR / "pilot_report.md"
+PROJECT = ROOT / "runs" / "module_scan"
+
+FIELDS = [
+    "timestamp",
+    "yaml_path",
+    "run_name",
+    "run_dir",
+    "status",
+    "error_type",
+    "error_message_short",
+    "results_csv_exists",
+    "best_pt_exists",
+    "args_yaml_exists",
+    "oom",
+    "nan_detected",
+    "loss_decreased",
+    "map50_nonzero",
+    "map50",
+    "map50_95",
+    "params_if_available",
+    "flops_if_available",
+    "recommended_next_step",
+]
 
 
-def extract_module_name(yaml_path: str) -> str:
-    """yolo26-CBAM.yaml -> CBAM"""
-    stem = Path(yaml_path).stem
-    if stem.startswith("yolo26-"):
-        return stem[7:]
-    return stem
+def short(text: object, limit: int = 180) -> str:
+    return " ".join(str(text).split())[:limit]
 
 
-def main():
-    parser = argparse.ArgumentParser(description="3-epoch pilot for YOLO26 module variant")
-    parser.add_argument("--model-yaml", required=True, help="Path to YAML config")
+def safe_load_yaml(path: Path) -> None:
+    with path.open("r", encoding="utf-8") as f:
+        yaml.safe_load(f)
+
+
+def module_name(yaml_path: Path) -> str:
+    stem = yaml_path.stem
+    return stem.removeprefix("yolo26-").replace("_", "-")
+
+
+def unique_name(base: str) -> str:
+    if not (PROJECT / base).exists():
+        return base
+    return f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+
+def run_text(command: list[str]) -> str:
+    try:
+        return subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False).stdout
+    except Exception as e:
+        return f"{type(e).__name__}: {e}\n"
+
+
+def save_repro_files(run_dir: Path, data_yaml: Path, command: str) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "git_commit.txt").write_text(run_text(["git", "rev-parse", "HEAD"]), encoding="utf-8")
+    (run_dir / "git_branch.txt").write_text(run_text(["git", "branch", "--show-current"]), encoding="utf-8")
+    (run_dir / "command.txt").write_text(command + "\n", encoding="utf-8")
+    (run_dir / "python_version.txt").write_text(sys.version + "\n", encoding="utf-8")
+    (run_dir / "torch_info.txt").write_text(torch_info(), encoding="utf-8")
+    (run_dir / "nvidia_smi.txt").write_text(run_text(["nvidia-smi"]), encoding="utf-8")
+    (run_dir / "pip_freeze.txt").write_text(run_text([sys.executable, "-m", "pip", "freeze"]), encoding="utf-8")
+    if data_yaml.exists():
+        shutil.copy2(data_yaml, run_dir / "data_yaml_snapshot.yaml")
+
+
+def torch_info() -> str:
+    try:
+        import torch
+
+        return "\n".join(
+            [
+                f"torch={torch.__version__}",
+                f"cuda_available={torch.cuda.is_available()}",
+                f"cuda_version={torch.version.cuda}",
+                f"device_count={torch.cuda.device_count()}",
+            ]
+        ) + "\n"
+    except Exception as e:
+        return f"{type(e).__name__}: {e}\n"
+
+
+def count_params(model) -> str:
+    module = getattr(model, "model", model)
+    try:
+        return str(sum(p.numel() for p in module.parameters()))
+    except Exception:
+        return ""
+
+
+def model_stats(model) -> tuple[str, str]:
+    params = count_params(model)
+    flops = ""
+    try:
+        info = model.info(detailed=False, verbose=False)
+    except Exception:
+        return params, flops
+    if isinstance(info, tuple):
+        if len(info) > 1 and info[1] is not None:
+            params = str(info[1])
+        if len(info) > 3 and info[3] is not None:
+            flops = str(info[3])
+    elif info is not None and not params:
+        params = short(info)
+    return params, flops
+
+
+def read_results(results_csv: Path) -> dict[str, object]:
+    out = {"nan_detected": False, "loss_decreased": False, "map50": "", "map50_95": "", "map50_nonzero": False}
+    if not results_csv.exists():
+        return out
+    rows = list(csv.DictReader(results_csv.open("r", encoding="utf-8")))
+    if not rows:
+        return out
+
+    numeric_rows: list[dict[str, float]] = []
+    for row in rows:
+        parsed = {}
+        for key, value in row.items():
+            try:
+                parsed[key.strip()] = float(value)
+            except (TypeError, ValueError):
+                continue
+        numeric_rows.append(parsed)
+
+    out["nan_detected"] = any(math.isnan(v) for row in numeric_rows for v in row.values())
+    last = numeric_rows[-1]
+    map50 = last.get("metrics/mAP50(B)", last.get("metrics/mAP50"))
+    map95 = last.get("metrics/mAP50-95(B)", last.get("metrics/mAP50-95"))
+    if map50 is not None:
+        out["map50"] = f"{map50:.6f}"
+        out["map50_nonzero"] = map50 > 0
+    if map95 is not None:
+        out["map50_95"] = f"{map95:.6f}"
+
+    loss_keys = [k for k in numeric_rows[0] if k.startswith("train/") and k.endswith("_loss")]
+    if loss_keys and len(numeric_rows) > 1:
+        first_loss = sum(numeric_rows[0].get(k, 0.0) for k in loss_keys)
+        last_loss = sum(last.get(k, 0.0) for k in loss_keys)
+        out["loss_decreased"] = last_loss < first_loss
+    return out
+
+
+def ensure_templates() -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    if not PILOT_CSV.exists():
+        with PILOT_CSV.open("w", newline="", encoding="utf-8") as f:
+            csv.DictWriter(f, fieldnames=FIELDS).writeheader()
+    if not PILOT_MD.exists():
+        PILOT_MD.write_text(
+            "\n".join(
+                [
+                    "# YOLO26 Module Pilot Report",
+                    "",
+                    "Append one row per single-module 3 epoch pilot.",
+                    "",
+                    "| yaml_path | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
+                    "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+
+def append_row(row: dict[str, object]) -> None:
+    ensure_templates()
+    with PILOT_CSV.open("a", newline="", encoding="utf-8") as f:
+        csv.DictWriter(f, fieldnames=FIELDS).writerow(row)
+    with PILOT_MD.open("a", encoding="utf-8") as f:
+        f.write(
+            "| {yaml_path} | {run_name} | {status} | {map50} | {map50_95} | {oom} | "
+            "{nan_detected} | {loss_decreased} | {recommended_next_step} |\n".format(**row)
+        )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run one YOLO26 module pilot")
+    parser.add_argument("--model-yaml", required=True)
     parser.add_argument("--data", default="configs/japan7_remote.yaml")
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--batch", type=int, default=16)
     parser.add_argument("--device", default="0")
     parser.add_argument("--workers", type=int, default=8)
-    parser.add_argument("--name", default=None, help="Override run name")
-    parser.add_argument("--no-amp", action="store_true", help="Disable AMP")
-    args = parser.parse_args()
+    parser.add_argument("--name")
+    parser.add_argument("--no-amp", action="store_true")
+    return parser.parse_args()
 
-    yaml_p = Path(args.model_yaml)
-    if not yaml_p.exists():
-        print(f"ERROR: YAML not found: {args.model_yaml}")
-        sys.exit(1)
 
-    module_name = extract_module_name(args.model_yaml)
-    run_name = args.name or f"module_{module_name}_japan7_e3_img640_b16_seed42"
+def main() -> None:
+    args = parse_args()
+    yaml_path = (ROOT / args.model_yaml).resolve()
+    data_yaml = (ROOT / args.data).resolve()
+    if not yaml_path.exists():
+        raise SystemExit(f"Missing model YAML: {args.model_yaml}")
+    if not data_yaml.exists():
+        raise SystemExit(f"Missing data YAML: {args.data}")
+    safe_load_yaml(yaml_path)
+    safe_load_yaml(data_yaml)
 
-    print(f"=== Module Pilot ===")
-    print(f"  YAML:     {args.model_yaml}")
-    print(f"  Module:   {module_name}")
-    print(f"  Data:     {args.data}")
-    print(f"  Epochs:   {args.epochs}")
-    print(f"  Run name: {run_name}")
-    print(f"  Device:   {args.device}")
-    print()
+    base = args.name or f"module_{module_name(yaml_path)}_japan7_e{args.epochs}_img{args.imgsz}_b{args.batch}_seed42"
+    run_name = unique_name(base)
+    run_dir = PROJECT / run_name
+    command = " ".join(sys.argv)
+    save_repro_files(run_dir, data_yaml, command)
 
-    # ── Build model ────────────────────────────────────────────────────────────
+    row = {field: "" for field in FIELDS}
+    row.update(
+        timestamp=datetime.now().isoformat(timespec="seconds"),
+        yaml_path=str(yaml_path.relative_to(ROOT)).replace("\\", "/"),
+        run_name=run_name,
+        run_dir=str(run_dir.relative_to(ROOT)).replace("\\", "/"),
+        status="ERROR",
+        oom=False,
+        nan_detected=False,
+        loss_decreased=False,
+        map50_nonzero=False,
+    )
+
     try:
         from ultralytics import YOLO
-        model = YOLO(str(yaml_p))
-        print("Model build OK")
-    except Exception as e:
-        print(f"BUILD FAILED: {e}")
-        sys.exit(1)
 
-    # ── Train ──────────────────────────────────────────────────────────────────
-    results = None
-    error_msg = ""
-    status = "UNKNOWN"
-
-    try:
-        results = model.train(
-            data=args.data,
+        model = YOLO(str(yaml_path))
+        row["params_if_available"], row["flops_if_available"] = model_stats(model)
+        model.train(
+            data=str(data_yaml),
             epochs=args.epochs,
             imgsz=args.imgsz,
             batch=args.batch,
@@ -88,110 +252,37 @@ def main():
             workers=args.workers,
             seed=42,
             amp=not args.no_amp,
-            project="runs/baseline",
+            project=str(PROJECT),
             name=run_name,
-            exist_ok=True,
+            exist_ok=False,
             plots=False,
         )
-        status = "COMPLETED"
+        row["status"] = "COMPLETED"
     except RuntimeError as e:
-        msg = str(e)
-        if "out of memory" in msg.lower() or "OOM" in msg:
-            status = "OOM"
-            error_msg = "GPU out of memory"
-        elif "NaN" in msg or "nan" in msg:
-            status = "NaN"
-            error_msg = "NaN detected during training"
-        else:
-            status = "RUNTIME_ERROR"
-            error_msg = msg[:200]
+        msg = short(e)
+        row.update(error_type=type(e).__name__, error_message_short=msg, oom="out of memory" in msg.lower())
+        row["status"] = "OOM" if row["oom"] else "RUNTIME_ERROR"
     except Exception as e:
-        status = "ERROR"
-        error_msg = f"{type(e).__name__}: {str(e)[:200]}"
+        row.update(status="ERROR", error_type=type(e).__name__, error_message_short=short(e))
 
-    # ── Collect metrics ────────────────────────────────────────────────────────
-    map50 = ""
-    map50_95 = ""
-    has_results_csv = False
-    has_best_pt = False
-    has_args_yaml = False
-    params_info = ""
-
-    exp_dir = Path("runs/baseline") / run_name
-
-    if status == "COMPLETED" and results is not None:
-        try:
-            map50 = f"{results.results_dict.get('metrics/mAP50(B)', 0):.4f}"
-            map50_95 = f"{results.results_dict.get('metrics/mAP50-95(B)', 0):.4f}"
-        except Exception:
-            pass
-
-    if exp_dir.exists():
-        has_results_csv = (exp_dir / "results.csv").exists()
-        has_best_pt = (exp_dir / "weights" / "best.pt").exists()
-        has_args_yaml = (exp_dir / "args.yaml").exists()
-
-    # ── Write pilot report row ─────────────────────────────────────────────────
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "timestamp", "module_name", "yaml_path", "run_name",
-        "status", "error_message",
-        "map50", "map50_95",
-        "has_results_csv", "has_best_pt", "has_args_yaml",
-        "params_info", "recommended_next_step",
-    ]
-
-    row = {
-        "timestamp": datetime.now().isoformat(),
-        "module_name": module_name,
-        "yaml_path": args.model_yaml,
-        "run_name": run_name,
-        "status": status,
-        "error_message": error_msg[:200],
-        "map50": map50,
-        "map50_95": map50_95,
-        "has_results_csv": str(has_results_csv),
-        "has_best_pt": str(has_best_pt),
-        "has_args_yaml": str(has_args_yaml),
-        "params_info": params_info,
-        "recommended_next_step": "",
-    }
-
-    if status == "COMPLETED":
-        try:
-            m50 = float(map50)
-            m95 = float(map50_95)
-            if m50 > 0.3 and m95 > 0.15:
-                row["recommended_next_step"] = "promote — proceed to 20-epoch signal test"
-            elif m50 > 0:
-                row["recommended_next_step"] = "review — metrics low, check loss curve before promoting"
-            else:
-                row["recommended_next_step"] = "skip — zero/NaN metrics"
-        except ValueError:
-            row["recommended_next_step"] = "investigate — could not parse metrics"
-    elif status == "OOM":
-        row["recommended_next_step"] = f"retry with --batch {max(4, args.batch // 4)}"
-    elif status == "NaN":
-        row["recommended_next_step"] = "skip — NaN training, likely module incompatible with training"
+    results_csv = run_dir / "results.csv"
+    checks = read_results(results_csv)
+    row.update(checks)
+    row.update(
+        results_csv_exists=results_csv.exists(),
+        best_pt_exists=(run_dir / "weights" / "best.pt").exists(),
+        args_yaml_exists=(run_dir / "args.yaml").exists(),
+    )
+    if row["status"] == "COMPLETED" and row["map50_nonzero"] and row["loss_decreased"] and not row["nan_detected"]:
+        row["recommended_next_step"] = "consider for 20/30 epoch signal test"
+    elif row["status"] == "OOM":
+        row["recommended_next_step"] = f"retry smaller batch, e.g. {max(1, args.batch // 2)}"
     else:
-        row["recommended_next_step"] = "investigate"
-
-    file_exists = PILOT_CSV.exists()
-    with open(PILOT_CSV, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            w.writeheader()
-        w.writerow(row)
-
-    # ── Print summary ──────────────────────────────────────────────────────────
-    print(f"\n=== Pilot Result ===")
-    print(f"  Status:        {status}")
-    print(f"  mAP50:         {map50}")
-    print(f"  mAP50-95:      {map50_95}")
-    print(f"  results.csv:   {has_results_csv}")
-    print(f"  best.pt:       {has_best_pt}")
-    print(f"  Next:          {row['recommended_next_step']}")
-    print(f"  Report:        {PILOT_CSV}")
+        row["recommended_next_step"] = "review before promotion"
+    append_row(row)
+    print(f"Wrote {PILOT_CSV}")
+    print(f"Wrote {PILOT_MD}")
+    print(f"Run dir: {run_dir}")
 
 
 if __name__ == "__main__":
