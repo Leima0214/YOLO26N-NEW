@@ -187,26 +187,43 @@ def read_results(results_csv: Path) -> dict[str, object]:
     return out
 
 
+def write_pilot_markdown(rows: list[dict[str, str]]) -> None:
+    lines = [
+        "# YOLO26 Module Pilot Report",
+        "",
+        "One row per module run. Older rows may have blank transfer fields.",
+        "",
+        "| yaml_path | pretrained | transfer | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for row in rows:
+        lines.append(
+            "| {yaml_path} | {pretrained} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
+            "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
+            "{loss_decreased} | {recommended_next_step} |".format(**row)
+        )
+    PILOT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def ensure_templates() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    if not PILOT_CSV.exists():
+    rows: list[dict[str, str]] = []
+    migrated = False
+    if PILOT_CSV.exists():
+        with PILOT_CSV.open("r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = [{field: row.get(field, "") for field in FIELDS} for row in reader]
+            migrated = reader.fieldnames != FIELDS
+        if migrated:
+            with PILOT_CSV.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=FIELDS)
+                writer.writeheader()
+                writer.writerows(rows)
+    else:
         with PILOT_CSV.open("w", newline="", encoding="utf-8") as f:
             csv.DictWriter(f, fieldnames=FIELDS).writeheader()
-    if not PILOT_MD.exists():
-        PILOT_MD.write_text(
-            "\n".join(
-                [
-                    "# YOLO26 Module Pilot Report",
-                    "",
-                    "Append one row per single-module 3 epoch pilot.",
-                    "",
-                    "| yaml_path | pretrained | transfer | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
-                    "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
-                ]
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+    if migrated or not PILOT_MD.exists():
+        write_pilot_markdown(rows)
 
 
 def append_row(row: dict[str, object]) -> None:
