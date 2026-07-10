@@ -20,6 +20,8 @@ EMA and P2Lite have near-identical scratch best scores despite different AMP mod
 
 Use `--pretrained none` only when deliberately studying scratch training.
 
+The remote project must contain the same ignored `yolo26n.pt` checkpoint at its root before a pretrained run starts. Do not add that file to Git.
+
 ## Transfer Audit
 
 | custom YAML | transferred items from `yolo26n.pt` | interpretation |

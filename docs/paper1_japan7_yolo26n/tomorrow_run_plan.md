@@ -57,7 +57,7 @@ The current composite models are paused. Both `P2Lite + EMA` and `P2Lite + SPDCo
 EMA_attention 1 epoch smoke:
 
 ```bash
-python scripts/train_module_pilot.py \
+/opt/conda/bin/python scripts/train_module_pilot.py \
   --model-yaml ultralytics/cfg/models/26/yolo26-EMA_attention.yaml \
   --data configs/japan7_remote.yaml \
   --pretrained yolo26n.pt \
@@ -72,7 +72,7 @@ python scripts/train_module_pilot.py \
 EMA_attention 30 epoch signal, only after successful smoke:
 
 ```bash
-python scripts/train_module_pilot.py \
+/opt/conda/bin/python scripts/train_module_pilot.py \
   --model-yaml ultralytics/cfg/models/26/yolo26-EMA_attention.yaml \
   --data configs/japan7_remote.yaml \
   --pretrained yolo26n.pt \
