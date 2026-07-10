@@ -20,10 +20,15 @@ OUT_DIR = ROOT / "experiments" / "module_scan"
 PILOT_CSV = OUT_DIR / "pilot_report.csv"
 PILOT_MD = OUT_DIR / "pilot_report.md"
 PROJECT = ROOT / "runs" / "module_scan"
+MIN_TRANSFER_RATIO = 0.10
 
 FIELDS = [
     "timestamp",
     "yaml_path",
+    "pretrained",
+    "transferred_items",
+    "transfer_total_items",
+    "transfer_ratio",
     "run_name",
     "run_dir",
     "status",
@@ -71,11 +76,12 @@ def run_text(command: list[str]) -> str:
         return f"{type(e).__name__}: {e}\n"
 
 
-def save_repro_files(run_dir: Path, data_yaml: Path, command: str) -> None:
+def save_repro_files(run_dir: Path, data_yaml: Path, command: str, pretrained: Path | None) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "git_commit.txt").write_text(run_text(["git", "rev-parse", "HEAD"]), encoding="utf-8")
     (run_dir / "git_branch.txt").write_text(run_text(["git", "branch", "--show-current"]), encoding="utf-8")
     (run_dir / "command.txt").write_text(command + "\n", encoding="utf-8")
+    (run_dir / "pretrained.txt").write_text(f"{pretrained or 'scratch'}\n", encoding="utf-8")
     (run_dir / "python_version.txt").write_text(sys.version + "\n", encoding="utf-8")
     (run_dir / "torch_info.txt").write_text(torch_info(), encoding="utf-8")
     (run_dir / "nvidia_smi.txt").write_text(run_text(["nvidia-smi"]), encoding="utf-8")
@@ -123,6 +129,26 @@ def model_stats(model) -> tuple[str, str]:
     elif info is not None and not params:
         params = short(info)
     return params, flops
+
+
+def transfer_stats(model) -> tuple[int, int]:
+    """Count the same-name, same-shape items used by Ultralytics weight transfer."""
+    checkpoint = getattr(model, "ckpt", None)
+    checkpoint_model = checkpoint.get("model") if isinstance(checkpoint, dict) else None
+    if checkpoint_model is None:
+        return 0, len(model.model.state_dict())
+    from ultralytics.utils.torch_utils import intersect_dicts
+
+    target = model.model.state_dict()
+    return len(intersect_dicts(checkpoint_model.float().state_dict(), target)), len(target)
+
+
+def save_transfer_metadata(run_dir: Path, pretrained: Path, transferred: int, total: int) -> None:
+    ratio = transferred / total if total else 0.0
+    (run_dir / "pretrained.txt").write_text(
+        f"{pretrained}\ntransferred_items={transferred}\ntotal_items={total}\ntransfer_ratio={ratio:.6f}\n",
+        encoding="utf-8",
+    )
 
 
 def read_results(results_csv: Path) -> dict[str, object]:
@@ -174,8 +200,8 @@ def ensure_templates() -> None:
                     "",
                     "Append one row per single-module 3 epoch pilot.",
                     "",
-                    "| yaml_path | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
-                    "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+                    "| yaml_path | pretrained | transfer | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
+                    "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
                 ]
             )
             + "\n",
@@ -189,8 +215,9 @@ def append_row(row: dict[str, object]) -> None:
         csv.DictWriter(f, fieldnames=FIELDS).writerow(row)
     with PILOT_MD.open("a", encoding="utf-8") as f:
         f.write(
-            "| {yaml_path} | {run_name} | {status} | {map50} | {map50_95} | {oom} | "
-            "{nan_detected} | {loss_decreased} | {recommended_next_step} |\n".format(**row)
+            "| {yaml_path} | {pretrained} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
+            "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
+            "{loss_decreased} | {recommended_next_step} |\n".format(**row)
         )
 
 
@@ -204,6 +231,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="0")
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--name")
+    parser.add_argument(
+        "--pretrained",
+        default="yolo26n.pt",
+        help="Checkpoint transferred into matching YAML layers; use 'none' for scratch training.",
+    )
+    parser.add_argument(
+        "--allow-low-transfer",
+        action="store_true",
+        help="Allow a pretrained run with under 10%% matching state items.",
+    )
     parser.add_argument("--no-amp", action="store_true")
     return parser.parse_args()
 
@@ -216,6 +253,10 @@ def main() -> None:
         raise SystemExit(f"Missing model YAML: {args.model_yaml}")
     if not data_yaml.exists():
         raise SystemExit(f"Missing data YAML: {args.data}")
+    pretrained_arg = args.pretrained.strip()
+    pretrained_path = None if pretrained_arg.lower() in {"", "none", "null"} else (ROOT / pretrained_arg).resolve()
+    if pretrained_path is not None and not pretrained_path.exists():
+        raise SystemExit(f"Missing pretrained checkpoint: {args.pretrained}")
     safe_load_yaml(yaml_path)
     safe_load_yaml(data_yaml)
 
@@ -223,12 +264,13 @@ def main() -> None:
     run_name = unique_name(base)
     run_dir = PROJECT / run_name
     command = " ".join(sys.argv)
-    save_repro_files(run_dir, data_yaml, command)
+    save_repro_files(run_dir, data_yaml, command, pretrained_path)
 
     row = {field: "" for field in FIELDS}
     row.update(
         timestamp=datetime.now().isoformat(timespec="seconds"),
         yaml_path=str(yaml_path.relative_to(ROOT)).replace("\\", "/"),
+        pretrained=str(pretrained_path.relative_to(ROOT)).replace("\\", "/") if pretrained_path else "scratch",
         run_name=run_name,
         run_dir=str(run_dir.relative_to(ROOT)).replace("\\", "/"),
         status="ERROR",
@@ -242,6 +284,17 @@ def main() -> None:
         from ultralytics import YOLO
 
         model = YOLO(str(yaml_path))
+        if pretrained_path is not None:
+            model.load(str(pretrained_path))
+            transferred, total = transfer_stats(model)
+            ratio = transferred / total if total else 0.0
+            row.update(transferred_items=transferred, transfer_total_items=total, transfer_ratio=f"{ratio:.6f}")
+            save_transfer_metadata(run_dir, pretrained_path, transferred, total)
+            if ratio < MIN_TRANSFER_RATIO and not args.allow_low_transfer:
+                raise RuntimeError(
+                    f"Only {transferred}/{total} checkpoint items match this YAML. "
+                    "Use architecture-native weights, train with --pretrained none, or explicitly pass --allow-low-transfer."
+                )
         row["params_if_available"], row["flops_if_available"] = model_stats(model)
         model.train(
             data=str(data_yaml),
@@ -254,7 +307,8 @@ def main() -> None:
             amp=not args.no_amp,
             project=str(PROJECT),
             name=run_name,
-            exist_ok=False,
+            # save_repro_files() intentionally creates this unique directory before training.
+            exist_ok=True,
             plots=False,
         )
         row["status"] = "COMPLETED"
@@ -273,7 +327,11 @@ def main() -> None:
         best_pt_exists=(run_dir / "weights" / "best.pt").exists(),
         args_yaml_exists=(run_dir / "args.yaml").exists(),
     )
-    if row["status"] == "COMPLETED" and row["map50_nonzero"] and row["loss_decreased"] and not row["nan_detected"]:
+    if pretrained_path is not None and row["transfer_ratio"] and float(row["transfer_ratio"]) < MIN_TRANSFER_RATIO:
+        row["recommended_next_step"] = "low transfer coverage: use architecture-native pretraining or label as scratch"
+    elif row["status"] == "COMPLETED" and args.epochs >= 100:
+        row["recommended_next_step"] = "review against the protocol-matched baseline"
+    elif row["status"] == "COMPLETED" and row["map50_nonzero"] and row["loss_decreased"] and not row["nan_detected"]:
         row["recommended_next_step"] = "consider for 20/30 epoch signal test"
     elif row["status"] == "OOM":
         row["recommended_next_step"] = f"retry smaller batch, e.g. {max(1, args.batch // 2)}"

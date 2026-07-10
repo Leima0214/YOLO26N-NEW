@@ -4,6 +4,19 @@ This branch records the module screening rules for YOLO26-probe. The current goa
 
 Do not modify Ultralytics core model code on this branch. Do not train. Do not restore old stashes. Do not fix `CARAFE`, `FDConv`, or `ContextAggregation` here; use a separate `fix/mmcv-compat-module-build` branch for that.
 
+## 2026-07-10 Protocol Correction
+
+The stored YOLO26n baseline was fine-tuned from `yolo26n.pt`, but the earlier module runner constructed custom YAMLs from scratch. The completed scratch formal runs therefore do not test whether EMA or P2Lite improves the pretrained YOLO26n baseline.
+
+| run | initialization | AMP | best epoch | mAP50 | mAP50-95 | disposition |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| EMA_attention 100e | scratch | False | 65 | 0.58704 | 0.31410 | archive as exploratory |
+| P2Lite 100e | scratch | True | 82 | 0.58718 | 0.31373 | archive as exploratory |
+
+The near-identical best scores despite different architectures and AMP modes identify random initialization as the first confounder to remove. The migration audit found `468/714` compatible state items for EMA_attention but only `8/881` for P2Lite. `scripts/train_module_pilot.py` now records this coverage in `pretrained.txt` and the pilot report.
+
+The next queue is EMA pretrained+AMP smoke followed by a 30 epoch pretrained EMA signal. P2Lite is paused: use an architecture-native CPUBone pretrained checkpoint only after a separate conversion/build validation. Do not run SPDConv or any composite until one signal is protocol-matched and positive.
+
 ## Current Scan Result
 
 The current buildability scan covers 13 YAML candidates:
@@ -42,24 +55,24 @@ The earlier high-level module stories remain valid only as long-term combination
 
 They must not be trained directly as three-module combinations. Run one module at a time first.
 
-Current Paper 1 signal decision:
+Historical scratch signal decision:
 
-- `EMA_attention` is the strongest single-module signal and should enter 100 epoch formal evaluation.
-- `CPUBoneNano-P2Lite` is the second strongest signal and remains the shallow-detail/P2 main candidate for 100 epoch formal evaluation.
-- `SPDConv` is useful but lower priority; keep it as an optional 100 epoch single-module candidate.
+- `EMA_attention` had the strongest scratch signal, but must be rerun with pretrained initialization before promotion.
+- `CPUBoneNano-P2Lite` had the strongest shallow-detail scratch signal, but requires architecture-native CPUBone pretraining before another formal run.
+- `SPDConv` remains paused; do not spend another 100 epoch run on the old scratch protocol.
 - Current composite YAMLs are trainable, but they should not enter 30 epoch or 100 epoch experiments yet.
 
 ## Paper 1 Route
 
 Paper 1 targets Japan7 single-domain detection. The focus is YOLO26n weakness on D00/D10 thin cracks, low contrast damage, and small road defects.
 
-30 epoch single-module ranking:
+Historical 30 epoch scratch ranking:
 
 | rank | module | mAP50 | mAP50-95 | params | FLOPs | decision |
 | ---: | --- | ---: | ---: | ---: | ---: | --- |
-| 1 | EMA_attention | 0.202 | 0.0884 | 2.377M | 5.2G | 100e formal |
-| 2 | CPUBoneNano-P2Lite | 0.153 | 0.0674 | 3.672M | 6.6G | 100e formal |
-| 3 | SPDConv | 0.129 | 0.0516 | 2.600M | 1.5G | optional 100e |
+| 1 | EMA_attention | 0.202 | 0.0884 | 2.377M | 5.2G | archive; rerun pretrained+AMP signal |
+| 2 | CPUBoneNano-P2Lite | 0.153 | 0.0674 | 3.672M | 6.6G | archive; CPUBone pretraining required |
+| 3 | SPDConv | 0.129 | 0.0516 | 2.600M | 1.5G | archive; paused |
 
 First 3 epoch pilot batch:
 
@@ -154,7 +167,7 @@ Deferred Paper 2 candidates:
 - training is stable
 - the module has a clear paper narrative
 
-100 epoch formal is limited to at most 1-2 models. Prioritize clear D00/D10 improvement, stable mAP50-95, acceptable Params/FLOPs/FPS, and a defensible paper motivation.
+100 epoch formal is limited to at most 1-2 models. Before promotion, ensure the run is a `yolo26n.pt` transfer fine-tune with AMP enabled and inspect the log line reporting transferred items. Prioritize clear D00/D10 improvement, stable mAP50-95, acceptable Params/FLOPs/FPS, and a defensible paper motivation.
 
 ## Do Not Do
 
@@ -165,6 +178,7 @@ Deferred Paper 2 candidates:
 - Do not restore old stashes into this clean branch.
 - Do not run all buildable modules for 100 epochs.
 - Do not treat `BUILD OK` as proof of effectiveness.
+- Do not compare a scratch custom YAML run against the pretrained YOLO26n baseline.
 - Do not judge only by total mAP; inspect D00/D10.
 - Do not mix Paper 1 Japan7 and Paper 2 Common4 in one main result table.
 - Do not commit `runs`, `datasets`, `.pt` weights, or large images.

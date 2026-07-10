@@ -6,6 +6,10 @@ Branch: `codex/yolo26-module-scan-cleanup`
 
 Stage: module cleanup and Paper 1/Paper 2 candidate screening.
 
+## 2026-07-10 Update
+
+The candidate list remains valid, but its historical scratch rankings are not directly comparable to the pretrained YOLO26n baseline. EMA_attention transfers `468/714` items from `yolo26n.pt` and remains active for a protocol-matched signal. CPUBoneNano-P2Lite transfers only `8/881`; it is paused pending architecture-native CPUBone weight conversion and build validation.
+
 ## Decision
 
 Use the current buildability scan as the execution baseline:

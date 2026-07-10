@@ -9,6 +9,14 @@ This directory records buildability and pilot reports for the YOLO26 module queu
 - `pilot_report.csv`: one appended row per 3 epoch pilot.
 - `pilot_report.md`: markdown pilot summary.
 
+## Formal Result Collection
+
+`scripts/collect_results.py` accepts only an explicit CSV manifest; it never searches or guesses run directories. The manifest must contain `model,run_dir` and may add `initialization,protocol,params,flops`.
+
+```bash
+python scripts/collect_results.py --manifest experiments/run_manifest.csv
+```
+
 ## Rules
 
 `BUILD OK` is not an effective module result. It only means the YAML file can be loaded safely and `YOLO(yaml)` can construct the model.
@@ -29,15 +37,28 @@ Pilot results are not paper results. Use them only to decide whether a module de
 
 100 epoch formal runs require a separate selection step and are limited to at most 1-2 models. Do not launch formal runs just because a YAML is buildable.
 
+## Protocol Correction: 2026-07-10
+
+The stored YOLO26n baseline is a COCO-pretrained `yolo26n.pt` fine-tune. Earlier module pilots and the two completed 100 epoch module runs constructed `YOLO(custom.yaml)` from scratch, so they are not directly comparable to that baseline.
+
+`train_module_pilot.py` now defaults to `--pretrained yolo26n.pt`, records `pretrained.txt` with the compatible-item coverage, and uses the exact pre-created run directory. Use `--pretrained none` only for an explicitly labeled scratch experiment. A transfer ratio below 10% is not a meaningful fine-tune and must be labeled as scratch/architecture-native pretraining required. Future formal comparisons must keep the same initialization, AMP mode, Japan7 split, seed, image size, batch, and epoch budget.
+
+Scratch 100 epoch archive:
+
+| module | AMP | best epoch | mAP50 | mAP50-95 | decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| EMA_attention | False | 65 | 0.58704 | 0.31410 | archive; not comparable to pretrained baseline |
+| CPUBoneNano-P2Lite | True | 82 | 0.58718 | 0.31373 | archive; not comparable to pretrained baseline |
+
 ## Paper 1 Signal Update
 
-Current 30 epoch single-module decision:
+Historical 30 epoch scratch signal:
 
 | module | mAP50 | mAP50-95 | params | FLOPs | decision |
 | --- | ---: | ---: | ---: | ---: | --- |
-| EMA_attention | 0.202 | 0.0884 | 2.377M | 5.2G | 100e formal |
-| CPUBoneNano-P2Lite | 0.153 | 0.0674 | 3.672M | 6.6G | 100e formal |
-| SPDConv | 0.129 | 0.0516 | 2.600M | 1.5G | optional 100e |
+| EMA_attention | 0.202 | 0.0884 | 2.377M | 5.2G | rerun only under pretrained protocol |
+| CPUBoneNano-P2Lite | 0.153 | 0.0674 | 3.672M | 6.6G | architecture-native pretraining required |
+| SPDConv | 0.129 | 0.0516 | 2.600M | 1.5G | do not promote before fair signal |
 
 Current 3 epoch composite pilot:
 

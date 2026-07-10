@@ -1,4 +1,6 @@
-# Paper 1 Tomorrow Run Plan
+# Paper 1 Next Run Plan
+
+> Superseded on 2026-07-10. Do not run the scratch 100 epoch commands below. The baseline uses `yolo26n.pt`, while those commands constructed custom YAMLs from scratch. Follow [formal_protocol_correction_20260710.md](formal_protocol_correction_20260710.md): EMA is the only current pretrained-transfer candidate; P2Lite needs a separate CPUBone checkpoint conversion validation.
 
 Date: 2026-07-09
 
@@ -25,13 +27,13 @@ The GPU can be shut down. Do not start more training tonight. Composite YAMLs ar
 | `module_Paper1-P2Lite-EMA_japan7_e3_img640_b32_seed42` | 3 | P2Lite + EMA | n/a | 0.0306 | 0.000128 | 0.0000280 | trainable, do not promote |
 | `module_Paper1_P2Lite_SPDConv_EMA_japan7_e3_img640_b32_seed42` | 3 | P2Lite + SPDConv + EMA | n/a | 0.0601 | 0.000230 | 0.0000569 | trainable, do not promote |
 
-## Single-Module Ranking
+## Historical Single-Module Ranking (Superseded)
 
 | rank | module | mAP50 | mAP50-95 | params | FLOPs | next action |
 | ---: | --- | ---: | ---: | ---: | ---: | --- |
-| 1 | EMA_attention | 0.202 | 0.0884 | 2.376873M | 5.2G | run 100e first |
-| 2 | P2Lite | 0.153 | 0.0674 | 3.672344M | 6.6G | run 100e second |
-| 3 | SPDConv | 0.129 | 0.0516 | 2.600377M | 1.5G | optional 100e |
+| 1 | EMA_attention | 0.202 | 0.0884 | 2.376873M | 5.2G | archive; rerun pretrained+AMP signal |
+| 2 | P2Lite | 0.153 | 0.0674 | 3.672344M | 6.6G | archive; CPUBone pretraining required |
+| 3 | SPDConv | 0.129 | 0.0516 | 2.600377M | 1.5G | archive; paused |
 
 ## Decisions
 
@@ -43,56 +45,43 @@ SPDConv is optional because it is weaker than EMA and P2Lite, but it is efficien
 
 The current composite models are paused. Both `P2Lite + EMA` and `P2Lite + SPDConv + EMA` can train, but their 3 epoch signals are below P2Lite alone. Future composite work should revisit EMA and SPDConv insertion positions before any 30e or 100e run.
 
-## Recommended Order Tomorrow
+## Current Recommended Order
 
 1. Pull the latest branch on the GPU machine.
-2. Run EMA_attention 100e.
-3. Run P2Lite 100e.
-4. Run SPDConv 100e only if time and GPU budget allow.
-5. Do not run composite 30e or 100e tomorrow.
+2. Run EMA_attention pretrained+AMP smoke.
+3. Only if smoke confirms `Transferred 468/714 items`, run its 30 epoch pretrained signal.
+4. Do not run P2Lite, SPDConv, or composite models until their initialization is scientifically valid.
 
-## Commands
+## Current Commands
 
-EMA_attention 100e:
+EMA_attention 1 epoch smoke:
 
 ```bash
 python scripts/train_module_pilot.py \
   --model-yaml ultralytics/cfg/models/26/yolo26-EMA_attention.yaml \
   --data configs/japan7_remote.yaml \
-  --epochs 100 \
+  --pretrained yolo26n.pt \
+  --epochs 1 \
   --imgsz 640 \
   --batch 32 \
   --device 0 \
   --workers 8 \
-  --name formal_Paper1_EMA_attention_japan7_e100_img640_b32_seed42
+  --name smoke_Paper1_EMA_attention_japan7_e1_img640_b32_pretrained_amp_seed42
 ```
 
-P2Lite 100e:
+EMA_attention 30 epoch signal, only after successful smoke:
 
 ```bash
 python scripts/train_module_pilot.py \
-  --model-yaml ultralytics/cfg/models/26/yolo26-CPUBoneNano-P2Lite.yaml \
+  --model-yaml ultralytics/cfg/models/26/yolo26-EMA_attention.yaml \
   --data configs/japan7_remote.yaml \
-  --epochs 100 \
+  --pretrained yolo26n.pt \
+  --epochs 30 \
   --imgsz 640 \
   --batch 32 \
   --device 0 \
   --workers 8 \
-  --name formal_Paper1_P2Lite_japan7_e100_img640_b32_seed42
-```
-
-SPDConv 100e optional:
-
-```bash
-python scripts/train_module_pilot.py \
-  --model-yaml ultralytics/cfg/models/26/yolo26-SPDConv.yaml \
-  --data configs/japan7_remote.yaml \
-  --epochs 100 \
-  --imgsz 640 \
-  --batch 32 \
-  --device 0 \
-  --workers 8 \
-  --name formal_Paper1_SPDConv_japan7_e100_img640_b32_seed42
+  --name signal_Paper1_EMA_attention_japan7_e30_img640_b32_pretrained_amp_seed42
 ```
 
 ## Manual Checks Before GPU Shutdown

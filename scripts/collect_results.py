@@ -1,91 +1,80 @@
 #!/usr/bin/env python3
-"""
-Collect results from runs/baseline/*/results.csv and generate a Markdown table.
+"""Collect exact formal runs listed in a CSV manifest; never infer run directories."""
 
-Output: experiments/baseline_table.md (overwrites template)
+from __future__ import annotations
 
-Usage:
-    python scripts/collect_results.py
-"""
-
+import argparse
+import csv
 from pathlib import Path
 
-RESULTS_DIR = Path("runs/baseline")
-OUTPUT = Path("experiments/baseline_table.md")
 
-EXPECTED = {
-    "yolov8n_japan7_e100_img640_b32_seed422": ("YOLOv8n", "yolov8n.pt"),
-    "yolo11n_japan7_e100_img640_b32_seed42":  ("YOLO11n", "yolo11n.pt"),
-    "yolo26n_japan7_e100_img640_b32_seed42":  ("YOLO26n", "yolo26n.pt"),
-    "yolo26s_japan7_e100_img640_b32_seed42":  ("YOLO26s", "yolo26s.pt"),
+ROOT = Path(__file__).resolve().parents[1]
+METRIC_COLUMNS = {
+    "metrics/precision(B)": "precision",
+    "metrics/recall(B)": "recall",
+    "metrics/mAP50(B)": "map50",
+    "metrics/mAP50-95(B)": "map50_95",
 }
 
 
-def read_last_metrics(csv_path: Path) -> dict:
-    """Read the last row of results.csv and extract key metrics."""
-    if not csv_path.exists():
+def read_best_metrics(results_csv: Path) -> dict[str, str]:
+    with results_csv.open("r", newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
         return {}
-    with open(csv_path) as f:
-        lines = f.readlines()
-    if len(lines) < 2:
-        return {}
-    header = lines[0].strip().split(",")
-    last = lines[-1].strip().split(",")
-    if len(header) != len(last):
-        return {}
-    row = dict(zip(header, last))
-
-    metrics = {}
-    col_map = {
-        "metrics/precision(B)": "precision",
-        "metrics/recall(B)": "recall",
-        "metrics/mAP50(B)": "map50",
-        "metrics/mAP50-95(B)": "map50_95",
-    }
-    for col, key in col_map.items():
-        if col in row:
-            try:
-                metrics[key] = f"{float(row[col]):.4f}"
-            except ValueError:
-                metrics[key] = row[col]
-    return metrics
+    best = max(rows, key=lambda row: float(row.get("metrics/mAP50-95(B)", "-inf")))
+    return {name: f"{float(best[column]):.6f}" for column, name in METRIC_COLUMNS.items() if best.get(column)}
 
 
-def main():
-    if not RESULTS_DIR.is_dir():
-        print(f"No results directory found: {RESULTS_DIR}")
-        print("Run training first, then re-run this script.")
-        return
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Collect formal experiment results from an explicit run manifest")
+    parser.add_argument("--manifest", required=True, help="CSV with model, run_dir, and optional protocol columns")
+    parser.add_argument("--output", default="experiments/formal_results.md")
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    manifest_path = (ROOT / args.manifest).resolve()
+    output_path = (ROOT / args.output).resolve()
+    if not manifest_path.exists():
+        raise SystemExit(f"Missing run manifest: {args.manifest}")
+
+    with manifest_path.open("r", newline="", encoding="utf-8") as f:
+        runs = list(csv.DictReader(f))
+    if not runs or not {"model", "run_dir"}.issubset(runs[0]):
+        raise SystemExit("Manifest must contain at least: model,run_dir")
 
     lines = [
-        "# Japan Baseline Results",
+        "# Formal Experiment Results",
         "",
-        "| Method | Weight | Data | Epochs | ImgSize | Precision | Recall | mAP50 | mAP50-95 | Params | FLOPs | Notes |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        f"Manifest: `{manifest_path.relative_to(ROOT).as_posix()}`",
+        "Best epoch is selected by mAP50-95 from each exact `results.csv` path.",
+        "",
+        "| model | initialization | protocol | params | FLOPs | P | R | mAP50 | mAP50-95 | run_dir | status |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
     ]
-
-    for exp_name, (method, weight) in EXPECTED.items():
-        csv_path = RESULTS_DIR / exp_name / "results.csv"
-        if not csv_path.exists():
-            lines.append(f"| {method} | {weight} | Japan | — | — | — | — | — | — | — | — | results.csv missing |")
-            print(f"  SKIP: {csv_path} not found")
+    for run in runs:
+        run_dir = (ROOT / run["run_dir"]).resolve()
+        if ROOT not in run_dir.parents or not (run_dir / "results.csv").exists():
+            lines.append(f"| {run['model']} | {run.get('initialization', '')} | {run.get('protocol', '')} |  |  |  |  |  |  | {run['run_dir']} | MISSING_RESULTS |")
             continue
-
-        m = read_last_metrics(csv_path)
-        precision = m.get("precision", "—")
-        recall = m.get("recall", "—")
-        map50 = m.get("map50", "—")
-        map50_95 = m.get("map50_95", "—")
-
+        metrics = {name: "" for name in METRIC_COLUMNS.values()}
+        metrics.update(read_best_metrics(run_dir / "results.csv"))
         lines.append(
-            f"| {method} | {weight} | Japan | 100 | 640 | {precision} | {recall} | {map50} | {map50_95} | | | |"
+            "| {model} | {initialization} | {protocol} | {params} | {flops} | {precision} | {recall} | {map50} | {map50_95} | {run_dir} | COMPLETED |".format(
+                initialization=run.get("initialization", ""),
+                protocol=run.get("protocol", ""),
+                params=run.get("params", ""),
+                flops=run.get("flops", ""),
+                **metrics,
+                **run,
+            )
         )
-        print(f"  OK: {exp_name}  mAP50={map50}  mAP50-95={map50_95}")
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    print(f"\nTable written to {OUTPUT}")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote {output_path}")
 
 
 if __name__ == "__main__":

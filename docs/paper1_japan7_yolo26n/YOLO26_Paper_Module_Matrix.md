@@ -1,5 +1,7 @@
 # YOLO26 Paper Module Matrix
 
+> 2026-07-10 update: EMA_attention is the only active Paper 1 transfer candidate (`468/714` matching items from `yolo26n.pt`). CPUBoneNano-P2Lite is paused (`8/881`) until an architecture-native CPUBone checkpoint conversion is validated.
+
 This matrix is the current Paper 1/Paper 2 module screening source of truth. `BUILD OK` means model construction only, not training stability or accuracy.
 
 | module | yaml_path | position | paper_target | research_role | build_status | params | risk | pilot_priority | notes |

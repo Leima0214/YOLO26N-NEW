@@ -5,6 +5,10 @@ Classes: D00, D10, D20, D40, D43, D44, D50
 Protocol: epochs=100, imgsz=640, batch=32, device=0, workers=8, seed=42  
 Metric source: final validation on best.pt
 
+## Comparison Guard
+
+This table uses COCO-pretrained model checkpoints. A custom YAML is comparable only when it transfers matching layers from `yolo26n.pt` and uses the same Japan7 split, seed, image size, batch, epoch budget, and AMP setting. Scratch runs are archived separately and must not be presented as direct deltas from this table.
+
 | Model | Dataset | Epochs | Img | Batch | Params | FLOPs | P | R | mAP50 | mAP50-95 | Run |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | YOLOv8n | Japan7 | 100 | 640 | 32 | 3.007M | 8.1G | 0.647 | 0.606 | 0.642 | 0.353 | yolov8n_japan7_e100_img640_b32_seed422 |
