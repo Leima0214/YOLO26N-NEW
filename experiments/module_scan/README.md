@@ -11,6 +11,7 @@ For a single-page baseline vs `30e+` Paper 1 comparison record, see [docs/paper1
 - `pilot_report.csv`: one appended row per 3 epoch pilot.
 - `pilot_report.md`: markdown pilot summary.
 - `paper1_tiera_buildability_report.csv` / `.md`: build-only audit of the 12 Paper 1 Tier A three-module YAMLs.
+- `paper1_tiera_adversarial_audit.csv` / `.md`: full-model forward/backward, identity initialization, fused inference, concurrency, malicious input, and semantic parameter-transfer audit.
 
 ## Formal Result Collection
 
@@ -44,7 +45,7 @@ Pilot results are not paper results. Use them only to decide whether a module de
 
 The stored YOLO26n baseline is a COCO-pretrained `yolo26n.pt` fine-tune. Earlier module pilots and the two completed 100 epoch module runs constructed `YOLO(custom.yaml)` from scratch, so they are not directly comparable to that baseline.
 
-`train_module_pilot.py` now defaults to `--pretrained yolo26n.pt`, records `pretrained.txt` with the compatible-item coverage, and uses the exact pre-created run directory. Use `--pretrained none` only for an explicitly labeled scratch experiment. A transfer ratio below 10% is not a meaningful fine-tune and must be labeled as scratch/architecture-native pretraining required. Future formal comparisons must keep the same initialization, AMP mode, Japan7 split, seed, image size, batch, and epoch budget.
+`train_module_pilot.py` now defaults to `--pretrained yolo26n.pt`, records item and parameter-weighted transfer coverage in `pretrained.txt`, and atomically reserves a unique run directory. Use `--pretrained none` only for an explicitly labeled scratch experiment. Tier A YAMLs must use `--checkpoint-remap auto`; their embedded semantic mappings make numeric-prefix remaps invalid. Parameter coverage below 80% is rejected by default. Future formal comparisons must keep the same initialization, AMP mode, Japan7 split, seed, image size, batch, and epoch budget.
 
 Scratch 100 epoch archive:
 
@@ -86,3 +87,9 @@ Their failures come from `mmcv` API compatibility. Fix them only on a separate `
 ## Tier A Composite Build Update: 2026-07-11
 
 The unused `mmcv` imports in CARAFE and FDConv were removed, and the selected slimneck blocks were clean-ported with parser registration. The 12 generated Tier A composite YAMLs now build successfully; see `paper1_tiera_buildability_report.md`. This supersedes the frozen status for CARAFE and FDConv only within these audited composites. `ContextAggregation` remains frozen.
+
+## Tier A Adversarial Correction: 2026-07-11
+
+The first A01-A12 implementation was not launch-ready despite building. Attention/fusion paths were non-identity at initialization, FFA was over-inserted, FDConv violated the replaced Conv contract, BiFPN pulled an unrelated dependency graph, and item-count remapping did not prove meaningful pretrained inheritance.
+
+The corrected generator and modules now pass `scripts/audit_paper1_tiera_models.py` for all 12 YAMLs. See `paper1_tiera_adversarial_audit.md` and `docs/paper1_japan7_yolo26n/paper1_tiera_adversarial_review.md`. Any result produced before this correction remains historical evidence for its old model definition and must not be attributed to the corrected YAML with the same filename.

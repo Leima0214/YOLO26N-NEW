@@ -72,22 +72,25 @@ def _estimate_fourier_angle(x: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
 
 def _rotate_feature(x: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
     """Rotate each feature map in a batch by its own angle."""
-    b, _, _, _ = x.shape
-    theta = theta.to(device=x.device, dtype=x.dtype)
+    original_dtype = x.dtype
+    work = x.float() if x.dtype in {torch.float16, torch.bfloat16} else x
+    b, _, _, _ = work.shape
+    theta = theta.to(device=work.device, dtype=work.dtype)
     cos_t, sin_t = torch.cos(theta), torch.sin(theta)
-    affine = x.new_zeros(b, 2, 3)
+    affine = work.new_zeros(b, 2, 3)
     affine[:, 0, 0] = cos_t
     affine[:, 0, 1] = -sin_t
     affine[:, 1, 0] = sin_t
     affine[:, 1, 1] = cos_t
-    grid = F.affine_grid(affine, x.size(), align_corners=False)
-    return F.grid_sample(x, grid, mode="bilinear", padding_mode="border", align_corners=False)
+    grid = F.affine_grid(affine, work.size(), align_corners=False)
+    rotated = F.grid_sample(work, grid, mode="bilinear", padding_mode="border", align_corners=False)
+    return rotated.to(dtype=original_dtype)
 
 
 class FourierAngleAlign(nn.Module):
     """Estimate a Fourier angle and align a feature map to a reference/canonical angle."""
 
-    def __init__(self, channels: int, m: int = 7, c_mid: int = 32, layer_scale_init_value: float = 1e-3):
+    def __init__(self, channels: int, m: int = 7, c_mid: int = 32, layer_scale_init_value: float = 0.0):
         super().__init__()
         m = _odd_kernel(m)
         hidden = max(min(int(c_mid), channels), 8)
@@ -115,7 +118,7 @@ class FFAFusionBlock(nn.Module):
         c2: int,
         m: int = 7,
         c_mid: int = 32,
-        layer_scale_init_value: float = 1e-3,
+        layer_scale_init_value: float = 0.0,
         expansion: float = 0.5,
     ):
         super().__init__()
@@ -144,7 +147,7 @@ class FFAFusionConcat(nn.Module):
         dimension: int = 1,
         m: int = 7,
         c_mid: int = 32,
-        layer_scale_init_value: float = 1e-3,
+        layer_scale_init_value: float = 0.0,
     ):
         super().__init__()
         if dimension != 1:
@@ -155,6 +158,11 @@ class FFAFusionConcat(nn.Module):
         )
 
     def forward(self, x: list[torch.Tensor]) -> torch.Tensor:
+        if not isinstance(x, (list, tuple)) or len(x) != len(self.align) + 1:
+            raise ValueError(
+                f"FFAFusionConcat expected {len(self.align) + 1} tensors, "
+                f"got {len(x) if isinstance(x, (list, tuple)) else type(x).__name__}"
+            )
         reference = x[-1]
         target_size = reference.shape[-2:]
         aligned = []
@@ -173,7 +181,7 @@ class FFAFusionDetect(Detect):
         nc: int = 80,
         m: int = 7,
         c_mid: int = 32,
-        layer_scale_init_value: float = 1e-3,
+        layer_scale_init_value: float = 0.0,
         reg_max=16,
         end2end=False,
         ch: tuple = (),

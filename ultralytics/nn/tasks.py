@@ -98,12 +98,11 @@ from ultralytics.utils.torch_utils import (
     time_sync,
 )
 
-from ultralytics.nn.v9 import Concat_bifpn
-
 CUSTOM_MODULE_IMPORTS = {
     "CARAFE": ("ultralytics.nn.CARAFE", "CARAFE"),
     "CBAM": ("ultralytics.nn.CBAM", "CBAM"),
     "ContextAggregation": ("ultralytics.nn.ContextAggregation", "ContextAggregation"),
+    "Concat_bifpn": ("ultralytics.nn.weighted_concat", "Concat_bifpn"),
     "CPUBoneFeatureIndex": ("ultralytics.nn.yolo26_cpubone2026", "CPUBoneFeatureIndex"),
     "CPUBoneP2BackboneYOLO": ("ultralytics.nn.yolo26_cpubone2026", "CPUBoneP2BackboneYOLO"),
     "EMA_attention": ("ultralytics.nn.EMA_attention", "EMA_attention"),
@@ -113,6 +112,7 @@ CUSTOM_MODULE_IMPORTS = {
     "LaplacianConv": ("ultralytics.nn.LaplacianConv", "LaplacianConv"),
     "SEAttention": ("ultralytics.nn.se", "SEAttention"),
     "GSConv": ("ultralytics.nn.slimneck", "GSConv"),
+    "SPDConv": ("ultralytics.nn.spdconv", "SPDConv"),
     "VoVGSCSP": ("ultralytics.nn.slimneck", "VoVGSCSP"),
     "space_to_depth": ("ultralytics.nn.spdconv", "space_to_depth"),
 }
@@ -124,6 +124,17 @@ def resolve_custom_module(name):
     cls = getattr(module, attr_name)
     globals()[name] = cls
     return cls
+
+
+def resolve_activation(spec):
+    """Resolve a no-argument torch.nn activation without executing YAML content."""
+    if not isinstance(spec, str):
+        raise ValueError(f"activation must be a string, got {type(spec).__name__}")
+    match = re.fullmatch(r"(?:(?:torch\.)?nn\.)?([A-Za-z][A-Za-z0-9_]*)\(\)", spec.strip())
+    allowed = {"GELU", "Hardswish", "Identity", "LeakyReLU", "ReLU", "ReLU6", "SiLU"}
+    if not match or match.group(1) not in allowed:
+        raise ValueError(f"Unsupported activation {spec!r}; use a no-argument torch.nn activation from {sorted(allowed)}")
+    return getattr(torch.nn, match.group(1))()
 
 
 class BaseModel(torch.nn.Module):
@@ -1567,7 +1578,7 @@ def parse_model(d, ch, verbose=True):
         depth, width, max_channels = scales[scale]
 
     if act:
-        Conv.default_act = eval(act)  # redefine default activation, i.e. Conv.default_act = torch.nn.SiLU()
+        Conv.default_act = resolve_activation(act)
         if verbose:
             LOGGER.info(f"{colorstr('activation:')} {act}")  # print
 
@@ -1625,6 +1636,7 @@ def parse_model(d, ch, verbose=True):
             "LaplacianConv",
             "SEAttention",
             "GSConv",
+            "SPDConv",
             "VoVGSCSP",
         }
     )
@@ -1698,7 +1710,10 @@ def parse_model(d, ch, verbose=True):
         elif module_name == "FFAFusionConcat":
             c2 = sum(ch[x] for x in f)
             args = [[ch[x] for x in f], *args]
-        elif m in {Concat, Concat_bifpn}:
+        elif module_name == "Concat_bifpn":
+            c2 = sum(ch[x] for x in f)
+            args = [len(f), *args]
+        elif m is Concat:
             c2 = sum(ch[x] for x in f)
         elif m in frozenset(
             {
@@ -1792,7 +1807,7 @@ def yaml_model_load(path):
         path = path.with_name(new_stem + path.suffix)
 
     unified_path = re.sub(r"(\d+)([nslmx])(.+)?$", r"\1\3", str(path))  # i.e. yolov8x.yaml -> yolov8.yaml
-    yaml_file = check_yaml(unified_path, hard=False) or check_yaml(path)
+    yaml_file = check_yaml(path, hard=False) or check_yaml(unified_path)
     d = YAML.load(yaml_file)  # model dict
     d["scale"] = guess_model_scale(path)
     d["yaml_file"] = str(path)
@@ -1844,12 +1859,18 @@ def guess_model_task(model):
             return cfg2task(model)
     # Guess from PyTorch model
     if isinstance(model, torch.nn.Module):  # PyTorch model
-        for x in "model.args", "model.model.args", "model.model.model.args":
+        for attributes in (("args",), ("model", "args"), ("model", "model", "args")):
             with contextlib.suppress(Exception):
-                return eval(x)["task"]  # nosec B307: safe eval of known attribute paths
-        for x in "model.yaml", "model.model.yaml", "model.model.model.yaml":
+                value = model
+                for attribute in attributes:
+                    value = getattr(value, attribute)
+                return value["task"]
+        for attributes in (("yaml",), ("model", "yaml"), ("model", "model", "yaml")):
             with contextlib.suppress(Exception):
-                return cfg2task(eval(x))  # nosec B307: safe eval of known attribute paths
+                value = model
+                for attribute in attributes:
+                    value = getattr(value, attribute)
+                return cfg2task(value)
         for m in model.modules():
             if isinstance(m, (Segment, YOLOESegment)):
                 return "segment"

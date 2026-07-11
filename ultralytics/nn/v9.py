@@ -21,6 +21,7 @@ import pandas as pd
 import requests
 import torch
 import torch.nn as nn
+from ultralytics.nn.weighted_concat import Concat_bifpn
 from IPython.display import display
 from PIL import Image
 from torch.cuda import amp
@@ -294,20 +295,6 @@ class DW(Conv):
 
 
 
-class Concat_bifpn(nn.Module):
-    def __init__(self, dimension=1):
-        super(Concat_bifpn, self).__init__()
-        self.d = dimension
-        self.w = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
-        self.epsilon = 0.0001
- 
-    def forward(self, x):
-        w = self.w
-        weight = w / (torch.sum(w, dim=0) + self.epsilon)  # 将权重进行归一化
-        # Fast normalized fusion
-        x = [weight[0] * x[0], weight[1] * x[1]]
-        return torch.cat(x, self.d)
-   
 class DWConvTranspose2d(nn.ConvTranspose2d):
     # Depth-wise transpose convolution
     def __init__(self, c1, c2, k=1, s=1, p1=0, p2=0):  # ch_in, ch_out, kernel, stride, padding, padding_out

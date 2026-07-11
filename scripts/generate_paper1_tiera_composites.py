@@ -15,6 +15,26 @@ SCALES = {
     "x": [1.00, 1.50, 512],
 }
 
+BASELINE_LAYERS = {
+    0: "p1",
+    1: "p2_down",
+    2: "backbone_p2",
+    3: "p3_down",
+    4: "backbone_p3",
+    5: "p4_down",
+    6: "backbone_p4",
+    7: "p5_down",
+    8: "backbone_p5",
+    9: "sppf",
+    10: "p5_context",
+    13: "top_p4",
+    16: "top_p3",
+    17: "down_p3_p4",
+    19: "detect_p4",
+    20: "down_p4_p5",
+    22: "detect_p5",
+}
+
 SPECS = [
     ("yolo26n-Paper1-TierA01-P2-SPDConv-EMA-P3f8.yaml", {"p2": True, "detail": "spd", "attention": "ema"}),
     ("yolo26n-Paper1-TierA02-P2-LaplacianConv-EMA-P3f8.yaml", {"p2": True, "detail": "lap", "attention": "ema"}),
@@ -45,12 +65,30 @@ class Graph:
         self.names[name] = len(self.layers) - 1
 
 
-def fusion_layer(mode):
+def fusion_layer(mode, point):
     if mode == "bifpn":
         return "Concat_bifpn", [1]
-    if mode == "ffa":
-        return "FFAFusionConcat", [1, 7, 32, 0.001]
+    if mode == "ffa" and point == "fuse_p3_top":
+        return "FFAFusionConcat", [1, 7, 32, 0.0]
     return "Concat", [1]
+
+
+def add_fusion(graph, name, sources, mode):
+    module, args = fusion_layer(mode, name)
+    graph.add(name, sources, 1, module, args)
+
+
+def pretrained_map(graph, has_p2):
+    """Map baseline semantic layers to their target indices without accidental index collisions."""
+    mapping = {f"model.{source}": f"model.{graph.names[name]}" for source, name in BASELINE_LAYERS.items()}
+    detect = graph.names["detect"]
+    if has_p2:
+        for family in ("cv2", "cv3", "one2one_cv2", "one2one_cv3"):
+            for source_level in range(3):
+                mapping[f"model.23.{family}.{source_level}"] = f"model.{detect}.{family}.{source_level + 1}"
+    else:
+        mapping["model.23"] = f"model.{detect}"
+    return mapping
 
 
 def build_model(options):
@@ -61,8 +99,7 @@ def build_model(options):
 
     detail = options.get("detail")
     if detail == "spd":
-        graph.add("p3_space_to_depth", -1, 1, "space_to_depth", [1])
-        graph.add("p3_down", -1, 1, "Conv", [256, 1, 1])
+        graph.add("p3_down", -1, 1, "SPDConv", [256])
     else:
         down_module = {"lap": "LaplacianConv", "fd": "FDConv"}.get(detail, "Conv")
         down_args = [256, 3, 2, 1] if detail == "fd" else [256, 3, 2]
@@ -76,35 +113,34 @@ def build_model(options):
     graph.add("p5_context", -1, 2, "C2PSA", [1024])
     backbone_length = len(graph.layers)
 
-    fuse_module, fuse_args = fusion_layer(options.get("fusion"))
+    fusion = options.get("fusion")
 
     graph.add("up_p5_p4", -1, 1, "nn.Upsample", [None, 2, "nearest"])
-    graph.add("fuse_p4_top", ["up_p5_p4", "backbone_p4"], 1, fuse_module, fuse_args)
+    add_fusion(graph, "fuse_p4_top", ["up_p5_p4", "backbone_p4"], fusion)
     graph.add("top_p4", -1, 2, "C3k2", [512, True])
 
     if options.get("carafe"):
-        graph.add("p4_reduce", -1, 1, "Conv", [256, 1, 1])
-        graph.add("up_p4_p3", -1, 1, "CARAFE", [256, 3, 2])
+        graph.add("up_p4_p3", -1, 1, "CARAFE", [512, 3, 2])
     else:
         graph.add("up_p4_p3", -1, 1, "nn.Upsample", [None, 2, "nearest"])
-    graph.add("fuse_p3_top", ["up_p4_p3", "backbone_p3"], 1, fuse_module, fuse_args)
+    add_fusion(graph, "fuse_p3_top", ["up_p4_p3", "backbone_p3"], fusion)
     graph.add("top_p3", -1, 2, "C3k2", [256, True])
 
     if options.get("p2"):
         graph.add("up_p3_p2", -1, 1, "nn.Upsample", [None, 2, "nearest"])
-        graph.add("fuse_p2", ["up_p3_p2", "backbone_p2"], 1, fuse_module, fuse_args)
+        add_fusion(graph, "fuse_p2", ["up_p3_p2", "backbone_p2"], fusion)
         graph.add("detect_p2", -1, 2, "C3k2", [128, True])
         graph.add("down_p2_p3", -1, 1, "Conv", [128, 3, 2])
-        graph.add("fuse_p3_bottom", ["down_p2_p3", "top_p3"], 1, fuse_module, fuse_args)
+        add_fusion(graph, "fuse_p3_bottom", ["down_p2_p3", "top_p3"], fusion)
         graph.add("detect_p3", -1, 2, "C3k2", [256, True])
     else:
         graph.names["detect_p3"] = graph.names["top_p3"]
 
     graph.add("down_p3_p4", "detect_p3", 1, "Conv", [256, 3, 2])
-    graph.add("fuse_p4_bottom", ["down_p3_p4", "top_p4"], 1, fuse_module, fuse_args)
+    add_fusion(graph, "fuse_p4_bottom", ["down_p3_p4", "top_p4"], fusion)
     graph.add("detect_p4", -1, 2, "C3k2", [512, True])
     graph.add("down_p4_p5", -1, 1, "Conv", [512, 3, 2])
-    graph.add("fuse_p5_bottom", ["down_p4_p5", "p5_context"], 1, fuse_module, fuse_args)
+    add_fusion(graph, "fuse_p5_bottom", ["down_p4_p5", "p5_context"], fusion)
     if options.get("slim"):
         graph.add("detect_p5", -1, 1, "VoVGSCSP", [1024, 1, 0.5])
     else:
@@ -125,7 +161,7 @@ def build_model(options):
         detect_sources.insert(0, "detect_p2")
     graph.add("detect", detect_sources, 1, "Detect", ["nc"])
 
-    return {
+    model = {
         "nc": 80,
         "end2end": True,
         "reg_max": 1,
@@ -134,6 +170,8 @@ def build_model(options):
         "backbone": graph.layers[:backbone_length],
         "head": graph.layers[backbone_length:],
     }
+    model["pretrained_map"] = pretrained_map(graph, bool(options.get("p2")))
+    return model
 
 
 def validate(path, expect_p2):
@@ -144,6 +182,9 @@ def validate(path, expect_p2):
     assert detect[2] == "Detect"
     assert len(detect[0]) == (4 if expect_p2 else 3)
     assert all(0 <= index < len(layers) - 1 for index in detect[0])
+    mapping = model.get("pretrained_map")
+    assert isinstance(mapping, dict) and mapping
+    assert len(mapping) == len(set(mapping)) == len(set(mapping.values()))
 
 
 def main():

@@ -168,6 +168,14 @@ EMA-P3-factor8 completed its matched 30 epoch signal on 2026-07-11 with `mAP50 =
 
 All 12 Tier A composites were materialized and passed build-only checks on 2026-07-11. CARAFE and FDConv are no longer dependency-blocked in these combinations; unused `mmcv` imports were removed. This is build evidence only. Pretrained transfer coverage, THOP FLOPs, smoke stability, and accuracy remain unverified.
 
+## 2026-07-11 Adversarial Correction
+
+The first buildable A01-A12 queue was superseded after a source-level and adversarial review. The corrected definitions use identity-initialized attention/fusion, a Conv-compatible FDConv, bounded Laplacian enhancement, one FFA node per FFA composite, channel-preserving CARAFE, minimal weighted concat, atomic SPDConv, and semantic pretrained maps.
+
+All 12 corrected models passed finite full-model forward/backward and fused-inference checks. Parameter-weighted pretrained coverage is `95.5-100%` for A01-A07/A10-A12, except that P2 Detect coverage is intentionally `86.562%` because the new P2 branch has no source. A08/A09 have only `58.347%`/`61.843%` neck coverage and remain lower priority. Detailed evidence is in `experiments/module_scan/paper1_tiera_adversarial_audit.md`.
+
+The old A05 30 epoch result (`0.526` mAP50, `0.295` mAP50-95) was produced with the superseded implementation. It proves that old design did not beat the control, not that corrected A05 fails. Fresh runs must use unique names and `--checkpoint-remap auto`.
+
 ### Decision Rules
 
 - A final composite is successful only if `mAP50-95 > 0.341`; target at least `0.346` to avoid treating noise as a paper result.

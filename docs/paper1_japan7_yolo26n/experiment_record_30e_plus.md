@@ -84,6 +84,20 @@ Comparison against the protocol-matched YOLO26n 30e control:
 
 The factor-8 correction did not recover the EMA signal. It also reduced Recall and both key-class metrics, so EMA-P3-factor8 is not justified as a standalone accuracy or recall module. It remains in the exploratory three-module YAML queue only because the project is screening composites before ablation; any final claim still requires the composite to exceed the baseline.
 
+### 2026-07-11 Tier A05 Pre-Correction Composite
+
+| run | initialization | AMP | Params | FLOPs | P | R | mAP50 | mAP50-95 | status |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `signal_Paper1_TierA05_Lap_EMA_BiFPN_japan7_e30_img640_b32_pretrained_amp_seed42_20260711_144442` | reported pretrained run | True | 2.377M | 5.3G | 0.543 | 0.527 | 0.526 | 0.295 | archive; old implementation underperformed |
+
+| model | D00 AP50 | D00 AP50-95 | D10 AP50 | D10 AP50-95 | mAP50 | mAP50-95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| YOLO26n 30e control | 0.406 | 0.190 | 0.315 | 0.123 | 0.572 | 0.318 |
+| old Tier A05 30e | 0.360 | 0.172 | 0.245 | 0.0997 | 0.526 | 0.295 |
+| delta (A05 - control) | -0.046 | -0.018 | -0.070 | -0.0233 | -0.046 | -0.023 |
+
+The run completed normally, but every primary/key-class metric was below the matched control. Its YAML and modules were subsequently superseded by the 2026-07-11 adversarial correction: identity initialization, semantic parameter transfer, and corrected BiFPN/Laplacian behavior materially change the model definition. This row is evidence for the old `be61dc3` implementation only and cannot be reused as a result for corrected A05.
+
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 
 These are the two completed 100 epoch module runs discussed yesterday. Both trained successfully, but neither beat the historical YOLO26n baseline.

@@ -18,6 +18,7 @@
 | [table_per_class.md](table_per_class.md) | Per-class results table |
 | [experiment_record_30e_plus.md](experiment_record_30e_plus.md) | Ongoing consolidated record for baseline and all Paper 1 runs above 30 epochs |
 | [paper1_tiera_composite_design.md](paper1_tiera_composite_design.md) | Prioritized Tier A three-module combinations and placements |
+| [paper1_tiera_adversarial_review.md](paper1_tiera_adversarial_review.md) | Root-cause review, corrections, adversarial tests, and residual risks for A01-A12 |
 | [figure_plan.md](figure_plan.md) | Planned figures for the paper |
 | [ablation_plan.md](ablation_plan.md) | Ablation study design (B0–B5) |
 | [method_candidates.md](method_candidates.md) | Candidate improvement methods |

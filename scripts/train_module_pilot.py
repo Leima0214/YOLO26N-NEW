@@ -6,9 +6,14 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -20,7 +25,7 @@ OUT_DIR = ROOT / "experiments" / "module_scan"
 PILOT_CSV = OUT_DIR / "pilot_report.csv"
 PILOT_MD = OUT_DIR / "pilot_report.md"
 PROJECT = ROOT / "runs" / "module_scan"
-MIN_TRANSFER_RATIO = 0.10
+MIN_TRANSFER_RATIO = 0.80
 
 FIELDS = [
     "timestamp",
@@ -29,6 +34,12 @@ FIELDS = [
     "transferred_items",
     "transfer_total_items",
     "transfer_ratio",
+    "transferred_numel",
+    "transfer_total_numel",
+    "transfer_numel_ratio",
+    "backbone_transfer_ratio",
+    "neck_transfer_ratio",
+    "detect_transfer_ratio",
     "run_name",
     "run_dir",
     "status",
@@ -53,9 +64,12 @@ def short(text: object, limit: int = 180) -> str:
     return " ".join(str(text).split())[:limit]
 
 
-def safe_load_yaml(path: Path) -> None:
+def safe_load_yaml(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as f:
-        yaml.safe_load(f)
+        data = yaml.safe_load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"YAML root must be a mapping: {path}")
+    return data
 
 
 def module_name(yaml_path: Path) -> str:
@@ -63,10 +77,51 @@ def module_name(yaml_path: Path) -> str:
     return stem.removeprefix("yolo26-").replace("_", "-")
 
 
-def unique_name(base: str) -> str:
-    if not (PROJECT / base).exists():
-        return base
-    return f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+def validate_run_name(name: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", name) or name in {".", ".."}:
+        raise ValueError("run name must be 1-128 characters using only letters, digits, dot, underscore, and hyphen")
+    return name
+
+
+def reserve_run(base: str) -> tuple[str, Path]:
+    """Atomically reserve a unique run directory across concurrent processes."""
+    PROJECT.mkdir(parents=True, exist_ok=True)
+    base = validate_run_name(base)
+    for attempt in range(100):
+        suffix = "" if attempt == 0 else f"_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{os.getpid()}_{attempt}"
+        run_name = f"{base}{suffix}"
+        run_dir = PROJECT / run_name
+        try:
+            run_dir.mkdir(exist_ok=False)
+            return run_name, run_dir
+        except FileExistsError:
+            continue
+    raise RuntimeError(f"Unable to reserve a unique run directory for {base}")
+
+
+@contextmanager
+def report_lock(timeout=30.0):
+    """Serialize report updates and recover locks left by dead processes."""
+    lock_path = OUT_DIR / ".pilot_report.lock"
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(descriptor, f"pid={os.getpid()}\n".encode())
+            break
+        except FileExistsError:
+            if lock_path.exists() and time.time() - lock_path.stat().st_mtime > 600:
+                lock_path.unlink(missing_ok=True)
+                continue
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"Timed out waiting for report lock: {lock_path}")
+            time.sleep(0.1)
+    try:
+        yield
+    finally:
+        os.close(descriptor)
+        lock_path.unlink(missing_ok=True)
 
 
 def run_text(command: list[str]) -> str:
@@ -77,7 +132,8 @@ def run_text(command: list[str]) -> str:
 
 
 def save_repro_files(run_dir: Path, data_yaml: Path, command: str, pretrained: Path | None) -> None:
-    run_dir.mkdir(parents=True, exist_ok=True)
+    if not run_dir.is_dir():
+        raise RuntimeError(f"Run directory was not reserved: {run_dir}")
     (run_dir / "git_commit.txt").write_text(run_text(["git", "rev-parse", "HEAD"]), encoding="utf-8")
     (run_dir / "git_branch.txt").write_text(run_text(["git", "branch", "--show-current"]), encoding="utf-8")
     (run_dir / "command.txt").write_text(command + "\n", encoding="utf-8")
@@ -91,19 +147,14 @@ def save_repro_files(run_dir: Path, data_yaml: Path, command: str, pretrained: P
 
 
 def torch_info() -> str:
-    try:
-        import torch
-
-        return "\n".join(
-            [
-                f"torch={torch.__version__}",
-                f"cuda_available={torch.cuda.is_available()}",
-                f"cuda_version={torch.version.cuda}",
-                f"device_count={torch.cuda.device_count()}",
-            ]
-        ) + "\n"
-    except Exception as e:
-        return f"{type(e).__name__}: {e}\n"
+    code = (
+        "import torch; "
+        "print(f'torch={torch.__version__}'); "
+        "print(f'cuda_available={torch.cuda.is_available()}'); "
+        "print(f'cuda_version={torch.version.cuda}'); "
+        "print(f'device_count={torch.cuda.device_count()}')"
+    )
+    return run_text([sys.executable, "-c", code])
 
 
 def count_params(model) -> str:
@@ -131,38 +182,108 @@ def model_stats(model) -> tuple[str, str]:
     return params, flops
 
 
-def transfer_stats(model) -> tuple[int, int, tuple[str, ...]]:
-    """Count the same-name, same-shape items used by Ultralytics weight transfer."""
-    checkpoint = getattr(model, "ckpt", None)
-    checkpoint_model = checkpoint.get("model") if isinstance(checkpoint, dict) else None
-    target = model.model.state_dict()
-    if checkpoint_model is None:
-        return 0, len(target), tuple(sorted(target))
-    from ultralytics.utils.torch_utils import intersect_dicts
-
-    matched = intersect_dicts(checkpoint_model.float().state_dict(), target)
-    return len(matched), len(target), tuple(sorted(set(target) - set(matched)))
+PREFIX_PATTERN = re.compile(r"^model\.\d+(?:\.(?:[A-Za-z_][A-Za-z0-9_]*|\d+))*$")
 
 
-def save_transfer_metadata(
-    run_dir: Path,
-    pretrained: Path,
-    transferred: int,
-    total: int,
-    checkpoint_remap: str = "",
-    remapped_items: int = 0,
-    unmatched_keys: tuple[str, ...] = (),
-) -> None:
-    ratio = transferred / total if total else 0.0
+def validate_pretrained_map(mapping: object) -> list[tuple[str, str]]:
+    """Validate and order a semantic state-dict prefix mapping."""
+    if not isinstance(mapping, dict) or not mapping:
+        raise ValueError("pretrained_map must be a non-empty mapping")
+    if len(mapping) > 128:
+        raise ValueError(f"pretrained_map has too many entries: {len(mapping)} > 128")
+    pairs = []
+    targets = set()
+    for source, target in mapping.items():
+        if not isinstance(source, str) or not isinstance(target, str):
+            raise ValueError("pretrained_map prefixes must be strings")
+        if not PREFIX_PATTERN.fullmatch(source) or not PREFIX_PATTERN.fullmatch(target):
+            raise ValueError(f"Unsafe pretrained_map prefix: {source!r} -> {target!r}")
+        if target in targets:
+            raise ValueError(f"Duplicate pretrained_map target prefix: {target}")
+        targets.add(target)
+        pairs.append((source, target))
+    return sorted(pairs, key=lambda item: len(item[0]), reverse=True)
+
+
+def remap_state_dict(source: dict, mapping: list[tuple[str, str]], keep_unmapped: bool) -> tuple[dict, int]:
+    """Rename source keys atomically, rejecting collisions before model mutation."""
+    renamed = {}
+    changed = 0
+    for key, value in source.items():
+        mapped = None
+        for source_prefix, target_prefix in mapping:
+            if key == source_prefix or key.startswith(f"{source_prefix}."):
+                mapped = f"{target_prefix}{key[len(source_prefix):]}"
+                changed += mapped != key
+                break
+        if mapped is None:
+            if not keep_unmapped:
+                continue
+            mapped = key
+        if mapped in renamed:
+            raise ValueError(f"Checkpoint mapping produced duplicate key: {mapped}")
+        renamed[mapped] = value
+    return renamed, changed
+
+
+def transfer_coverage(model, matched: dict) -> dict[str, object]:
+    """Report item and trainable-parameter coverage globally and by model region."""
+    target_state = model.model.state_dict()
+    target_parameters = dict(model.model.named_parameters())
+    matched_keys = set(matched)
+    backbone_layers = len(model.model.yaml["backbone"])
+    detect_index = len(model.model.model) - 1
+
+    def region(key):
+        match = re.match(r"model\.(\d+)", key)
+        if not match:
+            return "other"
+        index = int(match.group(1))
+        return "backbone" if index < backbone_layers else "detect" if index == detect_index else "neck"
+
+    total_numel = sum(parameter.numel() for parameter in target_parameters.values())
+    matched_numel = sum(target_parameters[key].numel() for key in matched_keys if key in target_parameters)
+    region_totals = {name: 0 for name in ("backbone", "neck", "detect")}
+    region_matched = region_totals.copy()
+    for key, parameter in target_parameters.items():
+        name = region(key)
+        if name in region_totals:
+            region_totals[name] += parameter.numel()
+            if key in matched_keys:
+                region_matched[name] += parameter.numel()
+
+    report = {
+        "transferred_items": len(matched),
+        "transfer_total_items": len(target_state),
+        "transfer_ratio": len(matched) / len(target_state) if target_state else 0.0,
+        "transferred_numel": matched_numel,
+        "transfer_total_numel": total_numel,
+        "transfer_numel_ratio": matched_numel / total_numel if total_numel else 0.0,
+        "unmatched_keys": tuple(sorted(set(target_state) - matched_keys)),
+    }
+    for name in region_totals:
+        total = region_totals[name]
+        report[f"{name}_transfer_ratio"] = region_matched[name] / total if total else 1.0
+    return report
+
+
+def save_transfer_metadata(run_dir: Path, pretrained: Path, report: dict, checkpoint_remap: str) -> None:
+    unmatched_keys = report["unmatched_keys"]
     (run_dir / "pretrained.txt").write_text(
         "\n".join(
             [
                 str(pretrained),
-                f"transferred_items={transferred}",
-                f"total_items={total}",
-                f"transfer_ratio={ratio:.6f}",
+                f"transferred_items={report['transferred_items']}",
+                f"total_items={report['transfer_total_items']}",
+                f"transfer_ratio={report['transfer_ratio']:.6f}",
+                f"transferred_parameter_numel={report['transferred_numel']}",
+                f"total_parameter_numel={report['transfer_total_numel']}",
+                f"transfer_parameter_numel_ratio={report['transfer_numel_ratio']:.6f}",
+                f"backbone_transfer_ratio={report['backbone_transfer_ratio']:.6f}",
+                f"neck_transfer_ratio={report['neck_transfer_ratio']:.6f}",
+                f"detect_transfer_ratio={report['detect_transfer_ratio']:.6f}",
                 f"checkpoint_remap={checkpoint_remap or 'none'}",
-                f"remapped_items={remapped_items}",
+                f"remapped_items={report['remapped_items']}",
                 f"unmatched_target_items={len(unmatched_keys)}",
                 *[f"unmatched_target_key={key}" for key in unmatched_keys],
                 "",
@@ -172,42 +293,36 @@ def save_transfer_metadata(
     )
 
 
-def load_pretrained(model, pretrained: Path, checkpoint_remap: str) -> tuple[int, int, int, tuple[str, ...]]:
-    """Load a checkpoint, optionally renaming one state-dict prefix before matching by name and shape."""
-    if not checkpoint_remap:
-        model.load(str(pretrained))
-        transferred, total, unmatched_keys = transfer_stats(model)
-        return transferred, total, 0, unmatched_keys
-
-    try:
-        source_prefix, target_prefix = checkpoint_remap.split(":", 1)
-    except ValueError as e:
-        raise ValueError("--checkpoint-remap must be SOURCE_PREFIX:TARGET_PREFIX") from e
-    if not source_prefix or not target_prefix or source_prefix == target_prefix:
-        raise ValueError("--checkpoint-remap requires two different non-empty prefixes")
-
+def load_pretrained(model, pretrained: Path, checkpoint_remap: str, semantic_map: object = None) -> dict:
+    """Load weights through a validated semantic map and return item/parameter coverage."""
     from ultralytics.nn.tasks import load_checkpoint
     from ultralytics.utils.torch_utils import intersect_dicts
 
     checkpoint_model, checkpoint = load_checkpoint(pretrained)
     source = checkpoint_model.float().state_dict()
     target = model.model.state_dict()
-    renamed = {}
-    remapped_items = 0
-    for key, value in source.items():
-        if key == source_prefix or key.startswith(f"{source_prefix}."):
-            key = f"{target_prefix}{key[len(source_prefix):]}"
-            remapped_items += 1
-        if key in renamed:
-            raise ValueError(f"Checkpoint remap produced duplicate key: {key}")
-        renamed[key] = value
-
+    mode = checkpoint_remap.strip().lower()
+    if semantic_map and mode != "auto":
+        raise ValueError("This YAML defines pretrained_map; legacy/manual remapping is forbidden. Use --checkpoint-remap auto.")
+    if mode == "auto" and semantic_map:
+        mapping = validate_pretrained_map(semantic_map)
+        renamed, remapped_items = remap_state_dict(source, mapping, keep_unmapped=False)
+    elif mode in {"", "auto", "none"}:
+        renamed, remapped_items = source, 0
+    else:
+        try:
+            source_prefix, target_prefix = checkpoint_remap.split(":", 1)
+        except ValueError as error:
+            raise ValueError("--checkpoint-remap must be auto or SOURCE_PREFIX:TARGET_PREFIX") from error
+        mapping = validate_pretrained_map({source_prefix: target_prefix})
+        renamed, remapped_items = remap_state_dict(source, mapping, keep_unmapped=True)
     matched = intersect_dicts(renamed, target)
     model.model.load_state_dict(matched, strict=False)
     model.ckpt = checkpoint
     model.overrides["pretrained"] = str(pretrained)
-    unmatched_keys = tuple(sorted(set(target) - set(matched)))
-    return len(matched), len(target), remapped_items, unmatched_keys
+    report = transfer_coverage(model, matched)
+    report["remapped_items"] = remapped_items
+    return report
 
 
 def read_results(results_csv: Path) -> dict[str, object]:
@@ -252,12 +367,13 @@ def write_pilot_markdown(rows: list[dict[str, str]]) -> None:
         "",
         "One row per module run. Older rows may have blank transfer fields.",
         "",
-        "| yaml_path | pretrained | transfer | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
-        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| yaml_path | pretrained | item transfer | parameter transfer | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
+        "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
             "| {yaml_path} | {pretrained} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
+            "{transferred_numel}/{transfer_total_numel} ({transfer_numel_ratio}) | "
             "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
             "{loss_decreased} | {recommended_next_step} |".format(**row)
         )
@@ -286,15 +402,17 @@ def ensure_templates() -> None:
 
 
 def append_row(row: dict[str, object]) -> None:
-    ensure_templates()
-    with PILOT_CSV.open("a", newline="", encoding="utf-8") as f:
-        csv.DictWriter(f, fieldnames=FIELDS).writerow(row)
-    with PILOT_MD.open("a", encoding="utf-8") as f:
-        f.write(
-            "| {yaml_path} | {pretrained} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
-            "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
-            "{loss_decreased} | {recommended_next_step} |\n".format(**row)
-        )
+    with report_lock():
+        ensure_templates()
+        with PILOT_CSV.open("a", newline="", encoding="utf-8") as f:
+            csv.DictWriter(f, fieldnames=FIELDS).writerow(row)
+        with PILOT_MD.open("a", encoding="utf-8") as f:
+            f.write(
+                "| {yaml_path} | {pretrained} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
+                "{transferred_numel}/{transfer_total_numel} ({transfer_numel_ratio}) | "
+                "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
+                "{loss_decreased} | {recommended_next_step} |\n".format(**row)
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -315,12 +433,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--allow-low-transfer",
         action="store_true",
-        help="Allow a pretrained run with under 10%% matching state items.",
+        help="Allow a pretrained run with under 80%% matching trainable parameter values.",
     )
     parser.add_argument(
         "--checkpoint-remap",
-        default="",
-        help="Rename one checkpoint state-dict prefix before transfer, e.g. model.23:model.24.",
+        default="auto",
+        help="Use the YAML semantic map (auto) or one legacy SOURCE_PREFIX:TARGET_PREFIX remap.",
     )
     parser.add_argument(
         "--expect-transfer",
@@ -331,25 +449,41 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_within_root(value: str, label: str) -> Path:
+    path = (ROOT / value).resolve()
+    if not path.is_relative_to(ROOT):
+        raise ValueError(f"{label} must stay inside the project root: {value}")
+    return path
+
+
 def main() -> None:
     args = parse_args()
-    yaml_path = (ROOT / args.model_yaml).resolve()
-    data_yaml = (ROOT / args.data).resolve()
+    if not 1 <= args.epochs <= 1000:
+        raise SystemExit("--epochs must be in [1, 1000]")
+    if not 32 <= args.imgsz <= 4096:
+        raise SystemExit("--imgsz must be in [32, 4096]")
+    if not 1 <= args.batch <= 1024:
+        raise SystemExit("--batch must be in [1, 1024]")
+    if not 0 <= args.workers <= 128:
+        raise SystemExit("--workers must be in [0, 128]")
+    yaml_path = resolve_within_root(args.model_yaml, "model YAML")
+    data_yaml = resolve_within_root(args.data, "data YAML")
     if not yaml_path.exists():
         raise SystemExit(f"Missing model YAML: {args.model_yaml}")
     if not data_yaml.exists():
         raise SystemExit(f"Missing data YAML: {args.data}")
     pretrained_arg = args.pretrained.strip()
-    pretrained_path = None if pretrained_arg.lower() in {"", "none", "null"} else (ROOT / pretrained_arg).resolve()
+    pretrained_path = (
+        None if pretrained_arg.lower() in {"", "none", "null"} else resolve_within_root(pretrained_arg, "checkpoint")
+    )
     if pretrained_path is not None and not pretrained_path.exists():
         raise SystemExit(f"Missing pretrained checkpoint: {args.pretrained}")
-    safe_load_yaml(yaml_path)
+    model_config = safe_load_yaml(yaml_path)
     safe_load_yaml(data_yaml)
 
     base = args.name or f"module_{module_name(yaml_path)}_japan7_e{args.epochs}_img{args.imgsz}_b{args.batch}_seed42"
-    run_name = unique_name(base)
-    run_dir = PROJECT / run_name
-    command = " ".join(sys.argv)
+    run_name, run_dir = reserve_run(base)
+    command = shlex.join(sys.argv)
     save_repro_files(run_dir, data_yaml, command, pretrained_path)
 
     row = {field: "" for field in FIELDS}
@@ -371,31 +505,33 @@ def main() -> None:
 
         model = YOLO(str(yaml_path))
         if pretrained_path is not None:
-            transferred, total, remapped_items, unmatched_keys = load_pretrained(
-                model, pretrained_path, args.checkpoint_remap
+            report = load_pretrained(model, pretrained_path, args.checkpoint_remap, model_config.get("pretrained_map"))
+            row.update(
+                transferred_items=report["transferred_items"],
+                transfer_total_items=report["transfer_total_items"],
+                transfer_ratio=f"{report['transfer_ratio']:.6f}",
+                transferred_numel=report["transferred_numel"],
+                transfer_total_numel=report["transfer_total_numel"],
+                transfer_numel_ratio=f"{report['transfer_numel_ratio']:.6f}",
+                backbone_transfer_ratio=f"{report['backbone_transfer_ratio']:.6f}",
+                neck_transfer_ratio=f"{report['neck_transfer_ratio']:.6f}",
+                detect_transfer_ratio=f"{report['detect_transfer_ratio']:.6f}",
             )
-            ratio = transferred / total if total else 0.0
-            row.update(transferred_items=transferred, transfer_total_items=total, transfer_ratio=f"{ratio:.6f}")
-            save_transfer_metadata(
-                run_dir,
-                pretrained_path,
-                transferred,
-                total,
-                args.checkpoint_remap,
-                remapped_items,
-                unmatched_keys,
-            )
+            save_transfer_metadata(run_dir, pretrained_path, report, args.checkpoint_remap)
             print(
-                f"Checkpoint transfer: {transferred}/{total}, remapped={remapped_items}, "
-                f"unmatched={len(unmatched_keys)}"
+                f"Checkpoint transfer: items={report['transferred_items']}/{report['transfer_total_items']}, "
+                f"parameter_numel={report['transferred_numel']}/{report['transfer_total_numel']}, "
+                f"backbone={report['backbone_transfer_ratio']:.3%}, neck={report['neck_transfer_ratio']:.3%}, "
+                f"detect={report['detect_transfer_ratio']:.3%}"
             )
-            if args.expect_transfer and args.expect_transfer != f"{transferred}/{total}":
+            actual_transfer = f"{report['transferred_items']}/{report['transfer_total_items']}"
+            if args.expect_transfer and args.expect_transfer != actual_transfer:
                 raise RuntimeError(
-                    f"Expected checkpoint transfer {args.expect_transfer}, got {transferred}/{total}. Training aborted."
+                    f"Expected checkpoint transfer {args.expect_transfer}, got {actual_transfer}. Training aborted."
                 )
-            if ratio < MIN_TRANSFER_RATIO and not args.allow_low_transfer:
+            if report["transfer_numel_ratio"] < MIN_TRANSFER_RATIO and not args.allow_low_transfer:
                 raise RuntimeError(
-                    f"Only {transferred}/{total} checkpoint items match this YAML. "
+                    f"Only {report['transfer_numel_ratio']:.1%} of target parameter values match this YAML. "
                     "Use architecture-native weights, train with --pretrained none, or explicitly pass --allow-low-transfer."
                 )
         row["params_if_available"], row["flops_if_available"] = model_stats(model)
@@ -430,7 +566,7 @@ def main() -> None:
         best_pt_exists=(run_dir / "weights" / "best.pt").exists(),
         args_yaml_exists=(run_dir / "args.yaml").exists(),
     )
-    if pretrained_path is not None and row["transfer_ratio"] and float(row["transfer_ratio"]) < MIN_TRANSFER_RATIO:
+    if pretrained_path is not None and row["transfer_numel_ratio"] and float(row["transfer_numel_ratio"]) < MIN_TRANSFER_RATIO:
         row["recommended_next_step"] = "low transfer coverage: use architecture-native pretraining or label as scratch"
     elif row["status"] == "COMPLETED" and args.epochs >= 100:
         row["recommended_next_step"] = "review against the protocol-matched baseline"
@@ -444,6 +580,8 @@ def main() -> None:
     print(f"Wrote {PILOT_CSV}")
     print(f"Wrote {PILOT_MD}")
     print(f"Run dir: {run_dir}")
+    if row["status"] != "COMPLETED":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
