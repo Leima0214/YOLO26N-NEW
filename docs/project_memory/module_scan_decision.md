@@ -176,6 +176,14 @@ All 12 corrected models passed finite full-model forward/backward and fused-infe
 
 The old A05 30 epoch result (`0.526` mAP50, `0.295` mAP50-95) was produced with the superseded implementation. It proves that old design did not beat the control, not that corrected A05 fails. Fresh runs must use unique names and `--checkpoint-remap auto`.
 
+## 2026-07-11 Corrected Composite Results And S4
+
+Commit-matched B0 reproduced at `0.574/0.319` mAP50/mAP50-95. Corrected A05 reached `0.526/0.294`; corrected A10 reached `0.513/0.289`. Both reduced all seven class AP50-95 values and are rejected without 100e promotion. Current EMA composites are paused, and the workflow returns to single-module diagnosis.
+
+WPFormer is a query-based pixel-level segmentation system, not a YOLO plug-in. Its WCA idea is relevant because it was designed for weak elongated defects and evaluated on CrackSeg9k. S4 therefore adapts only WCA's context-modulated Haar detail mechanism as `WaveletDetailRefinement` on the P3 Detect input. PCA is excluded because YOLO26 Detect has no mask-query state. S4 must be described as WPFormer-WCA-inspired WDR, not as full WPFormer.
+
+S4 passed exact pretrained baseline equivalence, 640x640 forward/backward, mixed-precision, fusion, and semantic-transfer audits. It remains an untrained candidate. Run one CUDA AMP smoke, then a matched 30e signal only; require at least `0.323` mAP50-95 without a material D00/D10 decline before any combination.
+
 ### Decision Rules
 
 - A final composite is successful only if `mAP50-95 > 0.341`; target at least `0.346` to avoid treating noise as a paper result.

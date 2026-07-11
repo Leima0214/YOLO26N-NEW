@@ -98,6 +98,24 @@ The factor-8 correction did not recover the EMA signal. It also reduced Recall a
 
 The run completed normally, but every primary/key-class metric was below the matched control. Its YAML and modules were subsequently superseded by the 2026-07-11 adversarial correction: identity initialization, semantic parameter transfer, and corrected BiFPN/Laplacian behavior materially change the model definition. This row is evidence for the old `be61dc3` implementation only and cannot be reused as a result for corrected A05.
 
+### 2026-07-11 Commit-Matched Corrected Series
+
+All three runs below used commit `80bdad9270519967c1e9cfdcef6814b53e4820ae`, `yolo26n.pt`, AMP, Japan7, 30 epochs, image size 640, batch 32, and seed 42.
+
+| model | P | R | mAP50 | mAP50-95 | decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| B0 YOLO26n | 0.587 | 0.561 | 0.574 | 0.319 | matched control |
+| corrected A05: Laplacian + EMA + weighted concat | 0.552 | 0.517 | 0.526 | 0.294 | reject; no 100e |
+| corrected A10: FDRConv + EMA + one-node FFA | 0.539 | 0.509 | 0.513 | 0.289 | reject; no 100e |
+
+| model | D00 AP50-95 | D10 AP50-95 | D20 | D40 | D43 | D44 | D50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| B0 | 0.193 | 0.130 | 0.348 | 0.189 | 0.537 | 0.439 | 0.397 |
+| corrected A05 | 0.173 | 0.100 | 0.328 | 0.162 | 0.506 | 0.404 | 0.384 |
+| corrected A10 | 0.164 | 0.0942 | 0.324 | 0.154 | 0.499 | 0.416 | 0.373 |
+
+The corrected B0 reproduces the historical 30e control within `+0.001 mAP50-95`, so commit `80bdad9` did not regress the baseline. Every class declined in both corrected composites. Learned residual strengths were also small: A05 Laplacian gain `-0.00915`, A05 EMA gamma `0.02426`, A10 FDRConv gain `-0.00133`, A10 FFA mean absolute scale `0.00494`, and A10 EMA gamma `0.00779`. A05/A10 are formally eliminated and existing EMA composites are paused. New work returns to single-module diagnosis.
+
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 
 These are the two completed 100 epoch module runs discussed yesterday. Both trained successfully, but neither beat the historical YOLO26n baseline.

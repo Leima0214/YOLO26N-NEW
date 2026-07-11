@@ -12,6 +12,7 @@ For a single-page baseline vs `30e+` Paper 1 comparison record, see [docs/paper1
 - `pilot_report.md`: markdown pilot summary.
 - `paper1_tiera_buildability_report.csv` / `.md`: build-only audit of the 12 Paper 1 Tier A three-module YAMLs.
 - `paper1_tiera_adversarial_audit.csv` / `.md`: full-model forward/backward, identity initialization, fused inference, concurrency, malicious input, and semantic parameter-transfer audit.
+- `paper1_s4_wpformer_wdr_audit.md`: 640x640 numerical, gradient, baseline-equivalence, fusion, and transfer audit for the WCA-inspired single-module candidate.
 
 ## Formal Result Collection
 

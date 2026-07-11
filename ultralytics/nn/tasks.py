@@ -114,6 +114,7 @@ CUSTOM_MODULE_IMPORTS = {
     "GSConv": ("ultralytics.nn.slimneck", "GSConv"),
     "SPDConv": ("ultralytics.nn.spdconv", "SPDConv"),
     "VoVGSCSP": ("ultralytics.nn.slimneck", "VoVGSCSP"),
+    "WaveletDetailRefinement": ("ultralytics.nn.wpformer_wavelet", "WaveletDetailRefinement"),
     "space_to_depth": ("ultralytics.nn.spdconv", "space_to_depth"),
 }
 
@@ -1638,6 +1639,7 @@ def parse_model(d, ch, verbose=True):
             "GSConv",
             "SPDConv",
             "VoVGSCSP",
+            "WaveletDetailRefinement",
         }
     )
     repeat_modules = frozenset(
