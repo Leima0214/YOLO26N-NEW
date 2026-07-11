@@ -3,16 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd
 
-import numpy as np
-import matplotlib.pyplot as plt
-from numpy.linalg import matrix_rank
 from torch.utils.checkpoint import checkpoint
 
-from mmcv.cnn import CONV_LAYERS
 from torch import Tensor
 import torch.nn.functional as F
 import math
-from timm.models.layers import trunc_normal_
 import time
 
 
@@ -497,7 +492,7 @@ def get_fft2freq(d1, d2, use_rfft=False):
         freq_w = torch.fft.fftfreq(d2)
 
     # Meshgrid to create a 2D grid of frequency coordinates
-    freq_hw = torch.stack(torch.meshgrid(freq_h, freq_w), dim=-1)
+    freq_hw = torch.stack(torch.meshgrid(freq_h, freq_w, indexing="ij"), dim=-1)
     # print(freq_hw)
     # print(freq_hw.shape)
     # Calculate the distance from the origin (0, 0) in the frequency space
@@ -526,7 +521,6 @@ def get_fft2freq(d1, d2, use_rfft=False):
     return sorted_coords.permute(1, 0), freq_hw
 
 
-@CONV_LAYERS.register_module()  # for mmdet, mmseg
 class FDConv(nn.Conv2d):
     def __init__(self,
                  *args,

@@ -1,0 +1,13 @@
+priority,yaml_path,build_ok,params,flops,detect_strides,error_type,error_message_short,recommended_next_step
+1,ultralytics/cfg/models/26/yolo26n-Paper1-TierA01-P2-SPDConv-EMA-P3f8.yaml,True,2642592,,4/8/16/32,,,audit pretrained transfer then 1e smoke
+2,ultralytics/cfg/models/26/yolo26n-Paper1-TierA02-P2-LaplacianConv-EMA-P3f8.yaml,True,2663073,,4/8/16/32,,,audit pretrained transfer then 1e smoke
+3,ultralytics/cfg/models/26/yolo26n-Paper1-TierA03-P2-EMA-P3f8-BiFPN.yaml,True,2663090,,4/8/16/32,,,audit pretrained transfer then 1e smoke
+4,ultralytics/cfg/models/26/yolo26n-Paper1-TierA04-SPDConv-EMA-P3f8-FFAFusion.yaml,True,2597848,,8/16/32,,,audit pretrained transfer then 1e smoke
+5,ultralytics/cfg/models/26/yolo26n-Paper1-TierA05-LaplacianConv-EMA-P3f8-BiFPN.yaml,True,2572965,,8/16/32,,,audit pretrained transfer then 1e smoke
+6,ultralytics/cfg/models/26/yolo26n-Paper1-TierA06-P2-SEAttention-P3-FFAFusion.yaml,True,2718112,,4/8/16/32,,,audit pretrained transfer then 1e smoke
+7,ultralytics/cfg/models/26/yolo26n-Paper1-TierA07-P2-CBAM-P3-BiFPN.yaml,True,2663097,,4/8/16/32,,,audit pretrained transfer then 1e smoke
+8,ultralytics/cfg/models/26/yolo26n-Paper1-TierA08-P2-EMA-P3f8-slimneck.yaml,True,2467104,,4/8/16/32,,,audit pretrained transfer then 1e smoke
+9,ultralytics/cfg/models/26/yolo26n-Paper1-TierA09-SPDConv-EMA-P3f8-slimneck.yaml,True,2356504,,8/16/32,,,audit pretrained transfer then 1e smoke
+10,ultralytics/cfg/models/26/yolo26n-Paper1-TierA10-FDConv-EMA-P3f8-FFAFusion.yaml,True,2626842,,8/16/32,,,audit pretrained transfer then 1e smoke
+11,ultralytics/cfg/models/26/yolo26n-Paper1-TierA11-P2-LaplacianConv-CARAFE.yaml,True,2677045,,4/8/16/32,,,audit pretrained transfer then 1e smoke
+12,ultralytics/cfg/models/26/yolo26n-Paper1-TierA12-FDConv-GSConv-CARAFE.yaml,True,2593534,,8/16/32,,,audit pretrained transfer then 1e smoke

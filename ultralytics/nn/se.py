@@ -2,12 +2,12 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import init
- 
+
  #详细改进流程和操作，请关注B站博主：Ai学术叫叫兽 er,畅享一对一指点迷津，已指导无数家人拿下学术硕果！！！
  
 class SEAttention(nn.Module):
  
-    def __init__(self, channel=512,reduction=16):
+    def __init__(self, channel=512, c2=None, reduction=16):
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
@@ -37,4 +37,3 @@ class SEAttention(nn.Module):
         y = self.avg_pool(x).view(b, c)
         y = self.fc(y).view(b, c, 1, 1)
         return x * y.expand_as(x)
- 

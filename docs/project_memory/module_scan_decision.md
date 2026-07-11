@@ -87,3 +87,92 @@ If target-domain validation selects `best.pt`, the experiment is not strict doma
 - Do not submit `runs`, `datasets`, `.pt` weights, or large images.
 - Do not treat `BUILD OK` as proof of effectiveness.
 - Do not mix Paper 1 Japan7 and Paper 2 Common4 in one main result table.
+
+## 2026-07-11 Three-Module Paper 1 Strategy
+
+Paper 1 now targets a final YOLO26n model with exactly three named modules. The final model must exceed the historical YOLO26n Japan7 baseline (`mAP50 = 0.623`, `mAP50-95 = 0.341`). Composite screening is exploratory; the later single-removal ablation table must report every metric rather than selecting only favorable columns.
+
+Each module must have a role declared before its experiment:
+
+- accuracy/detail role: expected to improve `mAP50-95`, especially D00/D10 AP;
+- recall role: may be retained for a reproducible Recall increase even if its standalone mAP gain is neutral;
+- efficiency role: may be retained for lower Params/FLOPs or higher measured FPS despite a small accuracy trade-off;
+- fusion role: expected to improve multi-scale feature use or stabilize the final three-module model.
+
+Recall alone must be described as improved detection coverage or sensitivity, not as proof of robustness. Robustness requires separate perturbation or cross-domain evidence. The final three-module model still has to beat the primary baseline metric; secondary-metric explanations cannot excuse a weaker final model.
+
+### Audited Combination Pools
+
+The pools below define the low-risk standard search space. They are not a hard requirement: combinations may use multiple modules from the same pool when the expected accuracy gain justifies the overlap.
+
+| slot | candidates | status |
+| --- | --- | --- |
+| detail | official YOLO26 P2, SPDConv, LaplacianConv, FDConv | P2 must use the official YOLO26 backbone; FDConv remains dependency-blocked |
+| attention | EMA-P3-factor8, SEAttention-P3, CBAM-P3 | EMA-P5 is rejected; P3 variants require fresh build checks |
+| neck/efficiency | BiFPN, FFAFusion-Neck, CARAFE, slimneck, GSConv | BiFPN/FFAFusion are active; CARAFE is dependency-blocked; slimneck/GSConv require clean-port review |
+
+The one-per-pool grid defines 57 low-risk triples (`4 x 3 x 5`, excluding the three LaplacianConv + GSConv direct collisions because both replace the same shallow layer). The broader search space also includes repeated-role, serial same-stage, multi-attention, and multi-fusion triples. Rank expected gain first; use complementarity, insertion conflicts, and independent interpretability only to order experiments within similar expected gain. Do not materialize the full combinatorial space.
+
+### Tier A: Complementary and Directly Interpretable
+
+| priority | three-module composite | intended roles | current decision |
+| ---: | --- | --- | --- |
+| 1 | official P2 + SPDConv + EMA-P3-factor8 | high-resolution detail + downsampling preservation + key-class attention | main Paper 1 hypothesis after clean single-module checks |
+| 2 | official P2 + LaplacianConv + EMA-P3-factor8 | high-resolution detail + edge response + key-class attention | strongest interpretable fallback |
+| 3 | official P2 + EMA-P3-factor8 + BiFPN | small-target coverage + attention + weighted fusion | active fusion alternative |
+| 4 | SPDConv + EMA-P3-factor8 + FFAFusion-Neck | detail preservation + attention + adaptive fusion | no-P2 accuracy alternative |
+| 5 | LaplacianConv + EMA-P3-factor8 + BiFPN | edge response + attention + weighted fusion | lower-complexity accuracy alternative |
+| 6 | official P2 + SEAttention-P3 + FFAFusion-Neck | high-resolution detail + lightweight attention control + adaptive fusion | attention-control composite |
+| 7 | official P2 + CBAM-P3 + BiFPN | high-resolution detail + traditional attention control + weighted fusion | traditional-control composite |
+| 8 | official P2 + EMA-P3-factor8 + slimneck | accuracy + recall/attention + efficiency | speed-oriented candidate; port review required |
+| 9 | SPDConv + EMA-P3-factor8 + slimneck | detail + attention + efficiency | speed-oriented no-P2 candidate |
+| 10 | FDConv + EMA-P3-factor8 + FFAFusion-Neck | frequency-aware stem + attention + adaptive fusion | frozen until FDConv builds cleanly |
+| 11 | official P2 + LaplacianConv + CARAFE | high-resolution detail + edge response + content-aware upsampling | accuracy-heavy candidate; CARAFE blocked |
+| 12 | FDConv + GSConv + CARAFE | frequency/detail + efficient shallow convolution + upsampling | high-risk efficiency candidate; not in first queue |
+
+### Tier B: Overlapping Roles but Plausible Accuracy Synergy
+
+These combinations do not satisfy the one-module-per-role rule, but remain valid candidates when the objective is final composite accuracy.
+
+| priority | three-module composite | overlap/risk | current decision |
+| ---: | --- | --- | --- |
+| 13 | official P2 + SPDConv + LaplacianConv | three shallow-detail mechanisms | strong accuracy candidate if initialization remains transferable |
+| 14 | official P2 + SPDConv + FDConv | P2 plus two downsampling/stem changes | high-capacity detail candidate; FDConv blocked |
+| 15 | official P2 + LaplacianConv + FDConv | two shallow filtering mechanisms | useful edge/frequency candidate; FDConv blocked |
+| 16 | official P2 + SPDConv + BiFPN | two detail mechanisms plus fusion | plausible recall-heavy composite |
+| 17 | official P2 + LaplacianConv + FFAFusion-Neck | detail duplication plus adaptive fusion | plausible accuracy-heavy composite |
+| 18 | official P2 + FDConv + FFAFusion-Neck | P2 and frequency-aware stem plus fusion | high-capacity candidate; FDConv blocked |
+| 19 | SPDConv + LaplacianConv + BiFPN | two shallow-detail mechanisms plus fusion | no-P2 fallback |
+| 20 | SPDConv + FDConv + FFAFusion-Neck | two convolution replacements plus fusion | dependency and optimization risk |
+| 21 | official P2 + CARAFE + BiFPN | two neck/fusion mechanisms | potentially strong multi-scale model, but expensive |
+| 22 | official P2 + CARAFE + FFAFusion-Neck | two adaptive fusion mechanisms | potentially strong but hard to attribute |
+| 23 | SPDConv + CARAFE + BiFPN | detail preservation plus two neck changes | high-FLOPs exploratory candidate |
+| 24 | LaplacianConv + CARAFE + FFAFusion-Neck | edge stem plus two fusion mechanisms | exploratory after dependency repair |
+
+### Tier C: Stacked or Conflicting Modules
+
+These are not forbidden. They are ranked last because direct YAML merging is insufficient: a serial order or relocation must be specified, pretrained mapping must be re-audited, and each resulting YAML needs a fresh build report.
+
+| priority | three-module composite | conflict | current decision |
+| ---: | --- | --- | --- |
+| 25 | EMA-P3-factor8 + SEAttention-P3 + CBAM-P3 | three attention gates on one scale | test only after single-attention variants; highest over-suppression risk |
+| 26 | EMA-P3-factor8 + SEAttention-P4 + CBAM-P5 | three attention modules across scales | more buildable than same-scale stacking, still difficult to attribute |
+| 27 | CARAFE + BiFPN + FFAFusion-Neck | three neck/fusion mechanisms | large optimization and latency risk |
+| 28 | SPDConv + LaplacianConv + FDConv | three shallow convolution/detail mechanisms | requires explicit layer assignment |
+| 29 | LaplacianConv + GSConv + EMA-P3-factor8 | LaplacianConv and GSConv target the same shallow layer | relocate or serialize before build |
+| 30 | official P2 + CPUBone-P2Lite + EMA-P3-factor8 | duplicate P2 paths and backbone replacement | lowest priority; invalid as a direct merge |
+
+Tier labels express engineering and attribution risk, not an assumption that Tier B/C cannot improve accuracy. A lower-tier composite may be promoted when its matched pilot result is stronger.
+
+EMA-P3-factor8 completed its matched 30 epoch signal on 2026-07-11 with `mAP50 = 0.518`, `mAP50-95 = 0.292`, and `Recall = 0.499`, below the 30 epoch control (`0.572`, `0.318`, `0.552`). It is rejected as a standalone module and retained only in the user-directed composite-first exploration queue.
+
+All 12 Tier A composites were materialized and passed build-only checks on 2026-07-11. CARAFE and FDConv are no longer dependency-blocked in these combinations; unused `mmcv` imports were removed. This is build evidence only. Pretrained transfer coverage, THOP FLOPs, smoke stability, and accuracy remain unverified.
+
+### Decision Rules
+
+- A final composite is successful only if `mAP50-95 > 0.341`; target at least `0.346` to avoid treating noise as a paper result.
+- An accuracy module should target at least `+0.003 mAP50-95` under a matched protocol.
+- A recall-role module should target at least `+0.02 Recall` with no more than `-0.003 mAP50-95` in the final composite.
+- An efficiency-role module should target at least `10%` measured FPS improvement or a clear Params/FLOPs reduction with no more than `-0.003 mAP50-95` in the final composite.
+- Report `P`, `R`, `mAP50`, `mAP50-95`, D00/D10 AP, Params, FLOPs, and FPS for every ablation row.
+- The old Baidu Netdisk source tree contains 105 YOLO26 YAMLs but is not a Git repository and currently fails import on an unrelated `timm.models.layers.weight_init` incompatibility. Use it only as a read-only module source; port selected modules into the clean branch and build-check them before training.

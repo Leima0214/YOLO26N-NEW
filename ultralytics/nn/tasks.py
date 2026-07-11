@@ -112,6 +112,8 @@ CUSTOM_MODULE_IMPORTS = {
     "HVIEnhanceStem": ("ultralytics.nn.yolo26_cvpr_improvements", "HVIEnhanceStem"),
     "LaplacianConv": ("ultralytics.nn.LaplacianConv", "LaplacianConv"),
     "SEAttention": ("ultralytics.nn.se", "SEAttention"),
+    "GSConv": ("ultralytics.nn.slimneck", "GSConv"),
+    "VoVGSCSP": ("ultralytics.nn.slimneck", "VoVGSCSP"),
     "space_to_depth": ("ultralytics.nn.spdconv", "space_to_depth"),
 }
 
@@ -1622,6 +1624,8 @@ def parse_model(d, ch, verbose=True):
             "HVIEnhanceStem",
             "LaplacianConv",
             "SEAttention",
+            "GSConv",
+            "VoVGSCSP",
         }
     )
     repeat_modules = frozenset(

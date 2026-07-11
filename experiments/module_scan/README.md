@@ -2,12 +2,15 @@
 
 This directory records buildability and pilot reports for the YOLO26 module queue.
 
+For a single-page baseline vs `30e+` Paper 1 comparison record, see [docs/paper1_japan7_yolo26n/experiment_record_30e_plus.md](../../docs/paper1_japan7_yolo26n/experiment_record_30e_plus.md).
+
 ## Reports
 
 - `buildability_report.csv`: build-only scan results for selected YAMLs.
 - `buildability_report.md`: markdown summary of the build-only scan.
 - `pilot_report.csv`: one appended row per 3 epoch pilot.
 - `pilot_report.md`: markdown pilot summary.
+- `paper1_tiera_buildability_report.csv` / `.md`: build-only audit of the 12 Paper 1 Tier A three-module YAMLs.
 
 ## Formal Result Collection
 
@@ -79,3 +82,7 @@ The current failed candidates are frozen on this branch:
 - `yolo26-ContextAggregation.yaml`
 
 Their failures come from `mmcv` API compatibility. Fix them only on a separate `fix/mmcv-compat-module-build` branch.
+
+## Tier A Composite Build Update: 2026-07-11
+
+The unused `mmcv` imports in CARAFE and FDConv were removed, and the selected slimneck blocks were clean-ported with parser registration. The 12 generated Tier A composite YAMLs now build successfully; see `paper1_tiera_buildability_report.md`. This supersedes the frozen status for CARAFE and FDConv only within these audited composites. `ContextAggregation` remains frozen.
