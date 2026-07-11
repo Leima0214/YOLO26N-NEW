@@ -131,24 +131,83 @@ def model_stats(model) -> tuple[str, str]:
     return params, flops
 
 
-def transfer_stats(model) -> tuple[int, int]:
+def transfer_stats(model) -> tuple[int, int, tuple[str, ...]]:
     """Count the same-name, same-shape items used by Ultralytics weight transfer."""
     checkpoint = getattr(model, "ckpt", None)
     checkpoint_model = checkpoint.get("model") if isinstance(checkpoint, dict) else None
+    target = model.model.state_dict()
     if checkpoint_model is None:
-        return 0, len(model.model.state_dict())
+        return 0, len(target), tuple(sorted(target))
     from ultralytics.utils.torch_utils import intersect_dicts
 
-    target = model.model.state_dict()
-    return len(intersect_dicts(checkpoint_model.float().state_dict(), target)), len(target)
+    matched = intersect_dicts(checkpoint_model.float().state_dict(), target)
+    return len(matched), len(target), tuple(sorted(set(target) - set(matched)))
 
 
-def save_transfer_metadata(run_dir: Path, pretrained: Path, transferred: int, total: int) -> None:
+def save_transfer_metadata(
+    run_dir: Path,
+    pretrained: Path,
+    transferred: int,
+    total: int,
+    checkpoint_remap: str = "",
+    remapped_items: int = 0,
+    unmatched_keys: tuple[str, ...] = (),
+) -> None:
     ratio = transferred / total if total else 0.0
     (run_dir / "pretrained.txt").write_text(
-        f"{pretrained}\ntransferred_items={transferred}\ntotal_items={total}\ntransfer_ratio={ratio:.6f}\n",
+        "\n".join(
+            [
+                str(pretrained),
+                f"transferred_items={transferred}",
+                f"total_items={total}",
+                f"transfer_ratio={ratio:.6f}",
+                f"checkpoint_remap={checkpoint_remap or 'none'}",
+                f"remapped_items={remapped_items}",
+                f"unmatched_target_items={len(unmatched_keys)}",
+                *[f"unmatched_target_key={key}" for key in unmatched_keys],
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
+
+
+def load_pretrained(model, pretrained: Path, checkpoint_remap: str) -> tuple[int, int, int, tuple[str, ...]]:
+    """Load a checkpoint, optionally renaming one state-dict prefix before matching by name and shape."""
+    if not checkpoint_remap:
+        model.load(str(pretrained))
+        transferred, total, unmatched_keys = transfer_stats(model)
+        return transferred, total, 0, unmatched_keys
+
+    try:
+        source_prefix, target_prefix = checkpoint_remap.split(":", 1)
+    except ValueError as e:
+        raise ValueError("--checkpoint-remap must be SOURCE_PREFIX:TARGET_PREFIX") from e
+    if not source_prefix or not target_prefix or source_prefix == target_prefix:
+        raise ValueError("--checkpoint-remap requires two different non-empty prefixes")
+
+    from ultralytics.nn.tasks import load_checkpoint
+    from ultralytics.utils.torch_utils import intersect_dicts
+
+    checkpoint_model, checkpoint = load_checkpoint(pretrained)
+    source = checkpoint_model.float().state_dict()
+    target = model.model.state_dict()
+    renamed = {}
+    remapped_items = 0
+    for key, value in source.items():
+        if key == source_prefix or key.startswith(f"{source_prefix}."):
+            key = f"{target_prefix}{key[len(source_prefix):]}"
+            remapped_items += 1
+        if key in renamed:
+            raise ValueError(f"Checkpoint remap produced duplicate key: {key}")
+        renamed[key] = value
+
+    matched = intersect_dicts(renamed, target)
+    model.model.load_state_dict(matched, strict=False)
+    model.ckpt = checkpoint
+    model.overrides["pretrained"] = str(pretrained)
+    unmatched_keys = tuple(sorted(set(target) - set(matched)))
+    return len(matched), len(target), remapped_items, unmatched_keys
 
 
 def read_results(results_csv: Path) -> dict[str, object]:
@@ -258,6 +317,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow a pretrained run with under 10%% matching state items.",
     )
+    parser.add_argument(
+        "--checkpoint-remap",
+        default="",
+        help="Rename one checkpoint state-dict prefix before transfer, e.g. model.23:model.24.",
+    )
+    parser.add_argument(
+        "--expect-transfer",
+        default="",
+        help="Abort before training unless transfer coverage equals ITEMS/TOTAL, e.g. 708/714.",
+    )
     parser.add_argument("--no-amp", action="store_true")
     return parser.parse_args()
 
@@ -302,11 +371,28 @@ def main() -> None:
 
         model = YOLO(str(yaml_path))
         if pretrained_path is not None:
-            model.load(str(pretrained_path))
-            transferred, total = transfer_stats(model)
+            transferred, total, remapped_items, unmatched_keys = load_pretrained(
+                model, pretrained_path, args.checkpoint_remap
+            )
             ratio = transferred / total if total else 0.0
             row.update(transferred_items=transferred, transfer_total_items=total, transfer_ratio=f"{ratio:.6f}")
-            save_transfer_metadata(run_dir, pretrained_path, transferred, total)
+            save_transfer_metadata(
+                run_dir,
+                pretrained_path,
+                transferred,
+                total,
+                args.checkpoint_remap,
+                remapped_items,
+                unmatched_keys,
+            )
+            print(
+                f"Checkpoint transfer: {transferred}/{total}, remapped={remapped_items}, "
+                f"unmatched={len(unmatched_keys)}"
+            )
+            if args.expect_transfer and args.expect_transfer != f"{transferred}/{total}":
+                raise RuntimeError(
+                    f"Expected checkpoint transfer {args.expect_transfer}, got {transferred}/{total}. Training aborted."
+                )
             if ratio < MIN_TRANSFER_RATIO and not args.allow_low_transfer:
                 raise RuntimeError(
                     f"Only {transferred}/{total} checkpoint items match this YAML. "
