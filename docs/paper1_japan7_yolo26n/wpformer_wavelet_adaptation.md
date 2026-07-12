@@ -22,7 +22,7 @@ Placement: one `WaveletDetailRefinement` instance on the final P3 feature used b
 Processing:
 
 1. Fixed orthonormal Haar decomposition produces LL, LH, HL, and HH bands.
-2. Local and global context from `LL + LH + HL + HH` generates a channel/spatial gate.
+2. Local and global context from `LL + mean(|LH|, |HL|, |HH|)` generates a channel/spatial gate.
 3. The same gate modulates the three directional detail bands, suppressing noisy high-frequency responses.
 4. Inverse Haar reconstruction returns to the original P3 resolution.
 5. A zero-initialized 1x1 output projection adds only the learned frequency correction to the baseline feature.
@@ -37,7 +37,7 @@ The local audit is recorded in `experiments/module_scan/paper1_s4_wpformer_wdr_a
 | --- | ---: |
 | Added parameters | 6,288 |
 | Expected Japan7 parameters | 2,382,489 (baseline 2,376,201 + 6,288) |
-| Estimated extra compute at 640 | less than 0.07G FLOPs; remote summary is authoritative |
+| Estimated extra compute at 640 | less than 0.07G arithmetic; functional Haar operations may be absent from THOP output, so measured FPS is authoritative |
 | Parameter transfer | 99.756144% |
 | Backbone transfer | 100% |
 | Neck transfer | 99.303994% |
@@ -83,3 +83,19 @@ Decision against the matched `80bdad9` B0 (`mAP50-95=0.319`):
 - at least `0.328` with a D00 or D10 gain: strong signal and eligible for a two-module experiment.
 
 Do not run a WPFormer-WDR three-module combination before this single-module result.
+
+## Adversarial Review (2026-07-12)
+
+| severity | finding | disposition |
+| --- | --- | --- |
+| High | Signed `LL + LH + HL + HH` algebraically collapsed to twice one polyphase sample for the selected Haar signs, so the context gate did not receive genuine multi-band context. | Fixed by combining signed LL structure with mean absolute directional detail. A regression check proves the old cancellation and rejects its return. |
+| High | Pixel-level CrackSeg9k evidence may not transfer to Japan7 bounding-box loss; a box can be large even when its crack line is thin. | Not fixable in code. S4 remains a single-module diagnostic with a `0.323` promotion gate. |
+| Medium | Zero-initialized output projection could leave the context path under-trained. | First-step projection and second-step context gradients are explicitly checked; learned projection/gate statistics must still be inspected after 30e. |
+| Medium | Empty spatial dimensions, integer tensors, wrong channels, malformed Haar bands, and invalid constructor values previously failed indirectly. | Explicit validation added; failed calls are verified not to mutate module state. |
+| Medium | THOP may omit functional slicing, arithmetic, padding, and Haar reconstruction. | Do not claim efficiency from reported GFLOPs alone; measure end-to-end FPS with the same hardware and protocol. |
+| Medium | A `.pt` checkpoint remains a trusted binary input; repository path confinement does not make a hostile pickle safe. | Use only the official/project-controlled `yolo26n.pt` and preserve its checksum in formal experiment metadata. |
+| Low | A hostile in-repository YAML could still request excessive model work even though YAML loading and module resolution do not execute arbitrary expressions. | Run only the committed S4 YAML at a verified Git hash; the pilot launcher already bounds image size, batch, epochs, and paths. |
+| Low | Concurrent audit processes could leave a partial report. | Report publication now uses atomic temporary-file replacement; module forward itself is stateless and passed concurrent re-entry. |
+| Residual | CUDA AMP, DDP, ONNX, and TensorRT behavior are not established locally. Non-finite inputs are propagated rather than hidden. | CUDA AMP is gated by remote 1e smoke. Export/DDP checks are required only if S4 is promoted. Training remains responsible for NaN detection. |
+
+The least certain issue is scientific, not mechanical: whether a box-supervised YOLO loss supplies enough signal for wavelet detail modulation to improve D00/D10. Buildability and exact baseline initialization cannot answer that question.

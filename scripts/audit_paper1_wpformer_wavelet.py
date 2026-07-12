@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -16,7 +17,12 @@ sys.path.insert(0, str(ROOT))
 from ultralytics import YOLO
 import torch
 
-from ultralytics.nn.wpformer_wavelet import WaveletDetailRefinement, haar_decompose, haar_reconstruct
+from ultralytics.nn.wpformer_wavelet import (
+    WaveletDetailRefinement,
+    haar_decompose,
+    haar_reconstruct,
+    wavelet_context,
+)
 
 
 MODEL_YAML = ROOT / "ultralytics/cfg/models/26/yolo26n-Paper1-S4-WPFormer-WDR-P3.yaml"
@@ -64,8 +70,30 @@ def main():
     roundtrip = haar_reconstruct(*haar_decompose(odd))[..., :7, :9]
     roundtrip_error = float((roundtrip - odd).abs().max().detach())
     assert roundtrip_error < 1e-6
+    even = torch.randn(2, 16, 8, 10)
+    bands = haar_decompose(even)
+    context = wavelet_context(*bands)
+    signed_sum = sum(bands)
+    aliased_sample = 2 * even[..., 1::2, 1::2]
+    assert torch.allclose(signed_sum, aliased_sample, atol=1e-6)
+    assert not torch.allclose(context, aliased_sample, atol=1e-4)
+    for malformed in (
+        (bands[0], bands[1][..., :-1], bands[2], bands[3]),
+        (bands[0], bands[1].double(), bands[2], bands[3]),
+        (bands[0], bands[1], bands[2], "malicious"),
+    ):
+        try:
+            haar_reconstruct(*malformed)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("malformed Haar bands were accepted")
 
-    for constructor in (lambda: WaveletDetailRefinement(16, 8), lambda: WaveletDetailRefinement(16, 16, 0)):
+    for constructor in (
+        lambda: WaveletDetailRefinement(16, 8),
+        lambda: WaveletDetailRefinement(16, 16, 0),
+        lambda: WaveletDetailRefinement(True),
+    ):
         try:
             constructor()
         except ValueError:
@@ -88,6 +116,7 @@ def main():
     assert any(grad is not None and grad.abs().sum() > 0 for grad in context_grads)
 
     boundary_module = WaveletDetailRefinement(16, 16, 4).eval()
+    state_before_failure = {name: value.clone() for name, value in boundary_module.state_dict().items()}
     singleton = torch.randn(1, 16, 1, 1)
     assert torch.equal(boundary_module(singleton), singleton)
     try:
@@ -96,6 +125,16 @@ def main():
         pass
     else:
         raise AssertionError("wrong-channel input was accepted")
+    for invalid in (torch.ones(1, 16, 5, 7, dtype=torch.int64), torch.empty(1, 16, 0, 7), "malicious"):
+        try:
+            boundary_module(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid input was accepted")
+    assert all(torch.equal(value, state_before_failure[name]) for name, value in boundary_module.state_dict().items())
+    large_finite = boundary_module(torch.full((1, 16, 5, 7), 1e10))
+    assert torch.isfinite(large_finite).all()
     concurrent_input = torch.randn(1, 16, 7, 9)
     with ThreadPoolExecutor(max_workers=4) as pool:
         concurrent_outputs = list(pool.map(lambda _: boundary_module(concurrent_input), range(8)))
@@ -164,7 +203,7 @@ def main():
         cuda_amp = "PASS"
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
-    REPORT.write_text(
+    report_text = (
         "\n".join(
             [
                 "# Paper 1 S4 WPFormer-WDR Audit",
@@ -180,10 +219,12 @@ def main():
                 f"| parameters (`nc=80` build) | {params} |",
                 f"| Haar odd-size roundtrip max error | {roundtrip_error:.3e} |",
                 f"| identity-init max error | {identity_error:.3e} |",
+                f"| signed-subband cancellation regression | PASS |",
                 f"| first-step output projection gradient L1 | {projection_grad:.6f} |",
                 f"| second-step context gradient | PASS |",
                 f"| invalid configuration/input rejection | PASS |",
-                f"| 1x1 and concurrent re-entry | PASS |",
+                f"| failure leaves state unchanged | PASS |",
+                f"| 1x1, large finite input, and concurrent re-entry | PASS |",
                 f"| full 640x640 forward/backward | PASS |",
                 f"| CPU bfloat16 | PASS |",
                 f"| CUDA AMP | {cuda_amp} |",
@@ -197,9 +238,11 @@ def main():
                 "Build and local numerical audits do not establish an accuracy gain. Run one remote CUDA AMP smoke before 30e.",
                 "",
             ]
-        ),
-        encoding="utf-8",
+        )
     )
+    temporary_report = REPORT.with_suffix(f".{os.getpid()}.tmp")
+    temporary_report.write_text(report_text, encoding="utf-8")
+    temporary_report.replace(REPORT)
     print(f"WROTE {REPORT}")
     print("PAPER1_S4_WPFORMER_WDR_AUDIT_OK")
 

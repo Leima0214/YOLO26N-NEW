@@ -184,6 +184,18 @@ WPFormer is a query-based pixel-level segmentation system, not a YOLO plug-in. I
 
 S4 passed exact pretrained baseline equivalence, 640x640 forward/backward, mixed-precision, fusion, and semantic-transfer audits. It remains an untrained candidate. Run one CUDA AMP smoke, then a matched 30e signal only; require at least `0.323` mAP50-95 without a material D00/D10 decline before any combination.
 
+### Conditional WDR Three-Module Queue
+
+WDR is technically shape-compatible with the remaining S1/S2/S3 single-module ideas, but no combination is authorized yet. The three possible three-module candidates formed by WDR plus two of those modules are:
+
+| priority | conditional three-module model | placement and roles | current risk |
+| ---: | --- | --- | --- |
+| W1 | WDR + SEAttention + single-node FFAFusion | FFA at P3 top-down fusion; WDR then SE on the final P3 Detect feature | best role separation, but WDR and FFA both use frequency cues |
+| W2 | FDRConv + WDR + SEAttention | FDRConv at P2-to-P3 downsampling; WDR then SE at final P3 Detect | two detail/frequency mechanisms may overlap; FDRConv was nearly unused in A10 |
+| W3 | FDRConv + WDR + single-node FFAFusion | FDRConv shallow downsampling; FFA P3 fusion; WDR P3 Detect refinement | three frequency-oriented mechanisms, highest redundancy and lowest priority |
+
+These rows are hypotheses, not YAMLs. If S4 is below `0.319`, delete all three. A constituent must first reach at least `0.323` alone; the corresponding two-module pair must then retain a positive signal before adding the third module. Do not force a three-module paper model when the single and pair evidence is negative.
+
 ### Decision Rules
 
 - A final composite is successful only if `mAP50-95 > 0.341`; target at least `0.346` to avoid treating noise as a paper result.

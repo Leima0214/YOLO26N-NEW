@@ -1,6 +1,6 @@
-# Experiment Record: Paper 1 Runs Above 30 Epochs
+# Experiment Record: Paper 1 Runs At 30 Epochs And Above
 
-This file is the ongoing ledger for the Japan7 baseline and every Paper 1 run above `30` epochs. Add new `30e`, `100e`, or other long-run results here as they are produced so later decisions do not depend on scattered chat history. Its purpose is fast lookup and fair comparison, not launch authorization.
+This file is the ongoing ledger for the Japan7 baseline and every Paper 1 run with `epochs >= 30`. Add new long-run results here as they are produced so later decisions do not depend on scattered chat history. Its purpose is fast lookup and fair comparison, not launch authorization.
 
 ## 1. Historical Japan7 Baseline (100 epochs)
 
@@ -120,11 +120,11 @@ The corrected B0 reproduces the historical 30e control within `+0.001 mAP50-95`,
 
 These are the two completed 100 epoch module runs discussed yesterday. Both trained successfully, but neither beat the historical YOLO26n baseline.
 
-| model | initialization | AMP | best epoch | Params | FLOPs | mAP50 | mAP50-95 | disposition |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| YOLO26n baseline | `yolo26n.pt` | True | 100 | 2.376M | 5.2G | 0.623 | 0.341 | stored baseline |
-| EMA_attention | scratch | False | 65 | 2.377M | 5.2G | 0.587 | 0.314 | archive as exploratory |
-| CPUBoneNano-P2Lite | scratch | True | 82 | 3.672M | 6.6G | 0.587 | 0.314 | archive as exploratory |
+| model | initialization | AMP | best epoch | Params | FLOPs | P | R | mAP50 | mAP50-95 | disposition |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| YOLO26n baseline | `yolo26n.pt` | True | 100 | 2.376M | 5.2G | 0.644 | 0.597 | 0.623 | 0.341 | stored baseline |
+| EMA_attention | scratch | False | 65 | 2.377M | 5.2G | 0.614 | 0.563 | 0.587 | 0.314 | archive as exploratory |
+| CPUBoneNano-P2Lite | scratch | True | 82 | 3.672M | 6.6G | 0.597 | 0.560 | 0.587 | 0.314 | archive as exploratory |
 
 Key-class comparison:
 
@@ -140,6 +140,15 @@ Per-class summaries preserved from the completed validation logs:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | EMA_attention 100e | 0.333 | 0.212 | 0.510 | 0.439 | 0.395 |
 | P2Lite 100e | 0.334 | 0.212 | 0.511 | 0.432 | 0.399 |
+
+Full per-class best-checkpoint validation:
+
+| model | D00 AP50/AP50-95 | D10 | D20 | D40 | D43 | D44 | D50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| EMA_attention 100e | 0.386/0.184 | 0.331/0.125 | 0.661/0.333 | 0.479/0.212 | 0.775/0.510 | 0.713/0.439 | 0.766/0.395 |
+| P2Lite 100e | 0.378/0.177 | 0.347/0.130 | 0.652/0.334 | 0.488/0.212 | 0.780/0.511 | 0.708/0.432 | 0.758/0.399 |
+
+Completed artifact directories are `formal_Paper1_EMA_attention_japan7_e100_img640_b32_noamp_202607102` and `formal_Paper1_P2Lite_japan7_e100_img640_b32_scratch_amp_seed42_202607102`. Their `results.csv`, `args.yaml`, and `best.pt` are backed up. The older launcher wrote command/commit metadata into the sibling names without the trailing `2`; both halves are retained in `paper1_20260710_results_docs.tar.gz` and `paper1_20260710_best_weights.tar.gz` and must be paired during reproduction review.
 
 ## 5. Why Yesterday's Formal Results Were Not Good Enough
 
@@ -157,3 +166,19 @@ The current evidence points to protocol and representation issues, not just "ins
 - the completed `EMA_attention 100e` and `P2Lite 100e` runs are useful as exploratory archive evidence, not as formal ablation wins.
 - any new `30e` or `100e` module conclusion must be compared first against the clean `YOLO26n 30e control` and then, if promoted, against the historical `YOLO26n 100e` baseline.
 - do not describe yesterday's module runs as having surpassed the baseline; they did not.
+
+## 7. Artifact Completeness Audit (2026-07-12)
+
+Numerical summaries and reproducibility artifacts are tracked separately. A row is `complete` only when metrics, `results.csv`, `args.yaml`, `best.pt`, command, commit, pretrained metadata, and environment snapshot are all preserved or intentionally inapplicable.
+
+| experiment group | numerical detail | local artifact evidence | status |
+| --- | --- | --- | --- |
+| Four Japan7 baselines, 100e | overall P/R/mAP, full per-class metrics, 100-row curves, commands, run manifest, environment | `experiments/japan7_baseline_20260707` and `experiments/baseline_japan7_summary`; its README explicitly says `args.yaml` was not retrieved, and no baseline `best.pt` was found in inspected backups | metrics complete; reproduction artifacts incomplete |
+| EMA and P2Lite formal, 100e | overall, best epoch, full per-class AP50/AP50-95 | results/args/commands/commits and both `best.pt` files in the 2026-07-10 archives; metadata split across sibling run names as documented above | recoverable but not self-contained |
+| Historical scratch EMA/P2Lite/SPDConv, 30e | overall signal metrics | results/args/best weights and logs in the 2026-07-09 archives | historical artifacts retained |
+| Protocol-matched B0 and EMA 30e from 2026-07-10 | overall/results curves and key classes | results/args/commands/commits/pretrained metadata plus best weights in 2026-07-10 archives | complete for their historical protocol |
+| EMA-P5-remap and EMA-P3-factor8, 30e | overall and per-class metrics recorded in this ledger | no matching local `results.csv`, `args.yaml`, or `best.pt` found in inspected archives | artifact gap |
+| Pre-correction Tier A05, 30e | overall and per-class metrics recorded | no matching local run artifacts found | artifact gap |
+| Corrected commit-`80bdad9` B0/A05/A10, 30e | overall, full per-class metrics, learned-module diagnostics | each has results/args/best/command/commit/pretrained/environment files in `paper1_80bdad9_e30_results_20260711.tar.gz`; `last.pt` intentionally excluded | complete |
+
+Therefore, it is not accurate to claim that every `30e+` experiment is fully archived. The scientific conclusions are recorded, but the missing historical run artifacts cannot be reconstructed after the corresponding remote GPU was shut down. Future `30e+` runs must be marked complete only after archive checksum verification.
