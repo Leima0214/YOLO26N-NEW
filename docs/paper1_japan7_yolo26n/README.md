@@ -19,6 +19,7 @@
 | [experiment_record_30e_plus.md](experiment_record_30e_plus.md) | Ongoing consolidated record for baseline and all Paper 1 runs above 30 epochs |
 | [paper1_tiera_composite_design.md](paper1_tiera_composite_design.md) | Prioritized Tier A three-module combinations and placements |
 | [paper1_tiera_adversarial_review.md](paper1_tiera_adversarial_review.md) | Root-cause review, corrections, adversarial tests, and residual risks for A01-A12 |
+| [paper1_tierb_adversarial_audit.md](../../experiments/module_scan/paper1_tierb_adversarial_audit.md) | B13-B24 structures, transfer coverage, runtime checks, severity-ranked findings, and residual uncertainty |
 | [wpformer_wavelet_adaptation.md](wpformer_wavelet_adaptation.md) | WPFormer applicability review and the S4 WDR single-module experiment |
 | [figure_plan.md](figure_plan.md) | Planned figures for the paper |
 | [ablation_plan.md](ablation_plan.md) | Ablation study design (B0–B5) |

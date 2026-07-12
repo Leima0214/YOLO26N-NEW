@@ -18,7 +18,7 @@ Use the current buildability scan as the execution baseline:
 - Build OK: 10
 - Build failed: 3
 
-Do not restore deleted module-zoo files into this branch. Do not repair failed modules here. Do not train from stacked module combinations.
+Do not restore deleted module-zoo files into this branch. Do not repair unrelated failed modules here. A generated composite must pass its audit and a matched smoke before any signal training.
 
 ## Build OK Candidates
 
@@ -107,9 +107,9 @@ The pools below define the low-risk standard search space. They are not a hard r
 
 | slot | candidates | status |
 | --- | --- | --- |
-| detail | official YOLO26 P2, SPDConv, LaplacianConv, FDConv | P2 must use the official YOLO26 backbone; FDConv remains dependency-blocked |
+| detail | official YOLO26 P2, SPDConv, LaplacianConv, FDConv | P2 uses the official YOLO26 backbone; the local FDConv port is transfer-compatible and audited |
 | attention | EMA-P3-factor8, SEAttention-P3, CBAM-P3 | EMA-P5 is rejected; P3 variants require fresh build checks |
-| neck/efficiency | BiFPN, FFAFusion-Neck, CARAFE, slimneck, GSConv | BiFPN/FFAFusion are active; CARAFE is dependency-blocked; slimneck/GSConv require clean-port review |
+| neck/efficiency | BiFPN, FFAFusion-Neck, CARAFE, slimneck, GSConv | BiFPN/FFAFusion/CARAFE are audited locally; slimneck/GSConv remain lower-transfer or higher-risk options |
 
 The one-per-pool grid defines 57 low-risk triples (`4 x 3 x 5`, excluding the three LaplacianConv + GSConv direct collisions because both replace the same shallow layer). The broader search space also includes repeated-role, serial same-stage, multi-attention, and multi-fusion triples. Rank expected gain first; use complementarity, insertion conflicts, and independent interpretability only to order experiments within similar expected gain. Do not materialize the full combinatorial space.
 
@@ -137,17 +137,31 @@ These combinations do not satisfy the one-module-per-role rule, but remain valid
 | priority | three-module composite | overlap/risk | current decision |
 | ---: | --- | --- | --- |
 | 13 | official P2 + SPDConv + LaplacianConv | three shallow-detail mechanisms | strong accuracy candidate if initialization remains transferable |
-| 14 | official P2 + SPDConv + FDConv | P2 plus two downsampling/stem changes | high-capacity detail candidate; FDConv blocked |
-| 15 | official P2 + LaplacianConv + FDConv | two shallow filtering mechanisms | useful edge/frequency candidate; FDConv blocked |
+| 14 | official P2 + SPDConv + FDConv | P2 plus two downsampling/stem changes | materialized; SPD backbone plus FDConv PAN downsampling |
+| 15 | official P2 + LaplacianConv + FDConv | two shallow filtering mechanisms | materialized; both Conv-compatible replacement paths inherit baseline weights |
 | 16 | official P2 + SPDConv + BiFPN | two detail mechanisms plus fusion | plausible recall-heavy composite |
 | 17 | official P2 + LaplacianConv + FFAFusion-Neck | detail duplication plus adaptive fusion | plausible accuracy-heavy composite |
-| 18 | official P2 + FDConv + FFAFusion-Neck | P2 and frequency-aware stem plus fusion | high-capacity candidate; FDConv blocked |
+| 18 | official P2 + FDConv + FFAFusion-Neck | P2 and frequency-aware stem plus fusion | materialized; build/runtime audit passed |
 | 19 | SPDConv + LaplacianConv + BiFPN | two shallow-detail mechanisms plus fusion | no-P2 fallback |
 | 20 | SPDConv + FDConv + FFAFusion-Neck | two convolution replacements plus fusion | dependency and optimization risk |
 | 21 | official P2 + CARAFE + BiFPN | two neck/fusion mechanisms | potentially strong multi-scale model, but expensive |
 | 22 | official P2 + CARAFE + FFAFusion-Neck | two adaptive fusion mechanisms | potentially strong but hard to attribute |
 | 23 | SPDConv + CARAFE + BiFPN | detail preservation plus two neck changes | high-FLOPs exploratory candidate |
-| 24 | LaplacianConv + CARAFE + FFAFusion-Neck | edge stem plus two fusion mechanisms | exploratory after dependency repair |
+| 24 | LaplacianConv + CARAFE + FFAFusion-Neck | edge stem plus two fusion mechanisms | materialized; exact pretrained baseline-equivalence passed |
+
+### 2026-07-12 Tier B Materialization
+
+All 12 Tier B rows (B13-B24) now have generated YAMLs. Repeated shallow replacements use explicit, non-conflicting placements: the first operator replaces the backbone P2-to-P3 downsampling and the second replaces PAN P3-to-P4 downsampling. This preserves the semantic checkpoint map and lets LaplacianConv/FDConv inherit the corresponding baseline Conv weights.
+
+All 12 passed safe construction, parameter-transfer checks, finite 640x640 forward/backward, 32x32 CPU mixed precision, fused inference, malformed-input recovery, fixed-shape concurrent inference, and atomic concurrent generation. Parameters span `2.552M-2.704M`; THOP complexity spans `5.9-10.1 GFLOPs`. Detailed evidence and severity-ranked residual risks are in `experiments/module_scan/paper1_tierb_adversarial_audit.md`.
+
+Materialization count after this update:
+
+- original Tier A/B/C list: 24 of 30 have YAMLs; the 6 Tier C rows remain hypotheses;
+- including the conditional WDR queue: 24 of 33 have YAMLs; Tier C plus W1-W3 leave 9 hypotheses;
+- before this update, the corresponding missing counts were 18 and 21.
+
+This is structural evidence only. No Tier B model was trained, and none is promoted by buildability alone.
 
 ### Tier C: Stacked or Conflicting Modules
 
