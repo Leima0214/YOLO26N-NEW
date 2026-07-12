@@ -27,9 +27,9 @@ def _meshgrid(y: torch.Tensor, x: torch.Tensor) -> tuple[torch.Tensor, torch.Ten
         return torch.meshgrid(y, x)
 
 
-def _wrap_pi(theta: torch.Tensor) -> torch.Tensor:
-    """Wrap angle differences to [-pi, pi]."""
-    return torch.atan2(torch.sin(theta), torch.cos(theta))
+def _wrap_axial(theta: torch.Tensor) -> torch.Tensor:
+    """Wrap axial angle differences to [-pi/2, pi/2]."""
+    return 0.5 * torch.atan2(torch.sin(2.0 * theta), torch.cos(2.0 * theta))
 
 
 def _estimate_fourier_angle(x: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
@@ -104,7 +104,7 @@ class FourierAngleAlign(nn.Module):
     def forward(self, x: torch.Tensor, reference: torch.Tensor | None = None) -> torch.Tensor:
         theta_x = _estimate_fourier_angle(x)
         theta_ref = x.new_zeros(theta_x.shape) if reference is None else _estimate_fourier_angle(reference)
-        delta = _wrap_pi(theta_ref - theta_x)
+        delta = _wrap_axial(theta_ref - theta_x)
         aligned = _rotate_feature(x, delta)
         return x + self.gamma * self.local(aligned - x)
 

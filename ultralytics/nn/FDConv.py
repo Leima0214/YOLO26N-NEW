@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 from ultralytics.nn.modules.conv import Conv, autopad
+from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
 
 class FDConv(nn.Module):
@@ -50,10 +51,20 @@ class FDConv(nn.Module):
         return detail.to(dtype=x.dtype)
 
     def forward(self, x):
-        base = self.conv(x)
-        detail = self.conv(self._high_frequency(x))
-        mixed = base + self.max_gain * torch.tanh(self.gamma) * detail
+        gain = self.max_gain * torch.tanh(self.gamma)
+        mixed = self.conv(x + gain * self._high_frequency(x))
         return self.act(self.bn(mixed))
+
+    def forward_fuse(self, x):
+        gain = self.max_gain * torch.tanh(self.gamma)
+        return self.act(self.conv(x + gain * self._high_frequency(x)))
+
+    def fuse_convs(self):
+        """Fuse the transfer-compatible Conv-BN path for deployment."""
+        if hasattr(self, "bn"):
+            self.conv = fuse_conv_and_bn(self.conv, self.bn)
+            delattr(self, "bn")
+            self.forward = self.forward_fuse
 
 
 __all__ = ("FDConv",)

@@ -275,6 +275,8 @@ class BaseModel(torch.nn.Module):
                     m.conv = fuse_conv_and_bn(m.conv, m.bn)  # update conv
                     delattr(m, "bn")  # remove batchnorm
                     m.forward = m.forward_fuse  # update forward
+                if m.__class__.__name__ in {"FDConv", "LaplacianConv"} and hasattr(m, "fuse_convs"):
+                    m.fuse_convs()
                 if isinstance(m, ConvTranspose) and hasattr(m, "bn"):
                     m.conv_transpose = fuse_deconv_and_bn(m.conv_transpose, m.bn)
                     delattr(m, "bn")  # remove batchnorm

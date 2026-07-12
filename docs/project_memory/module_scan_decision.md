@@ -109,7 +109,7 @@ The pools below define the low-risk standard search space. They are not a hard r
 | --- | --- | --- |
 | detail | official YOLO26 P2, SPDConv, LaplacianConv, FDConv | P2 uses the official YOLO26 backbone; the local FDConv port is transfer-compatible and audited |
 | attention | EMA-P3-factor8, SEAttention-P3, CBAM-P3 | EMA-P5 is rejected; P3 variants require fresh build checks |
-| neck/efficiency | BiFPN, FFAFusion-Neck, CARAFE, slimneck, GSConv | BiFPN/FFAFusion/CARAFE are audited locally; slimneck/GSConv remain lower-transfer or higher-risk options |
+| neck/efficiency | BiFPN-labelled weighted concat, FFAFusion-Neck, CARAFE, slimneck, GSConv | `Concat_bifpn` is BiFPN-style positive weighted concatenation, not classic additive BiFPN; FFA/CARAFE are audited locally |
 
 The one-per-pool grid defines 57 low-risk triples (`4 x 3 x 5`, excluding the three LaplacianConv + GSConv direct collisions because both replace the same shallow layer). The broader search space also includes repeated-role, serial same-stage, multi-attention, and multi-fusion triples. Rank expected gain first; use complementarity, insertion conflicts, and independent interpretability only to order experiments within similar expected gain. Do not materialize the full combinatorial space.
 
@@ -153,7 +153,11 @@ These combinations do not satisfy the one-module-per-role rule, but remain valid
 
 All 12 Tier B rows (B13-B24) now have generated YAMLs. Repeated shallow replacements use explicit, non-conflicting placements: the first operator replaces the backbone P2-to-P3 downsampling and the second replaces PAN P3-to-P4 downsampling. This preserves the semantic checkpoint map and lets LaplacianConv/FDConv inherit the corresponding baseline Conv weights.
 
-All 12 passed safe construction, parameter-transfer checks, finite 640x640 forward/backward, 32x32 CPU mixed precision, fused inference, malformed-input recovery, fixed-shape concurrent inference, and atomic concurrent generation. Parameters span `2.552M-2.704M`; THOP complexity spans `5.9-10.1 GFLOPs`. Detailed evidence and severity-ranked residual risks are in `experiments/module_scan/paper1_tierb_adversarial_audit.md`.
+All 12 passed safe construction, parameter-transfer checks, finite 640x640 forward/backward, 32x32 CPU mixed precision, real custom BatchNorm fusion, malformed-input recovery, fixed-shape concurrent inference, and atomic concurrent generation/reporting. Parameters span `2.552M-2.704M`; THOP reports `5.9-9.9 GFLOPs` after the FDConv correction, but this is a lower bound because functional FFT, grid sampling, unfold, interpolation, and rearrangement operations may be omitted. Detailed evidence and severity-ranked residual risks are in `experiments/module_scan/paper1_tierb_adversarial_audit.md`.
+
+The follow-up adversarial review corrected axial angle wrapping in FFA, removed FDConv's duplicate convolution, replaced CARAFE patch replication with bounded einsum reassembly, stabilized weighted concatenation with softmax, implemented LaplacianConv/FDConv BN fusion, and made the audit effective under `python -O`. Every model is now probed at six boundary shapes; non-stride-aligned direct inputs may be rejected by FPN fusion, so Tier B training enforces an `imgsz` divisible by 32.
+
+Tier B training additionally requires the SHA256-pinned project-root `yolo26n.pt`, `imgsz <= 640`, `batch <= 32`, and the audited regional transfer minima. Each run stores model/data snapshots, their hashes, checkpoint hash, Git status, and a durable state marker. CUDA AMP, measured latency/FPS, peak VRAM, and training iteration time remain remote smoke requirements and are not established by this structural audit.
 
 Materialization count after this update:
 

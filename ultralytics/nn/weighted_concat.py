@@ -24,8 +24,7 @@ class Concat_bifpn(nn.Module):
         spatial = x[0].shape[2:]
         if any(tensor.shape[2:] != spatial for tensor in x[1:]):
             raise ValueError(f"Concat_bifpn spatial shapes must match, got {[tuple(t.shape) for t in x]}")
-        positive = torch.nn.functional.softplus(self.w)
-        weights = positive / positive.mean()
+        weights = torch.softmax(self.w, dim=0) * self.num_inputs
         return torch.cat([weight.to(tensor.dtype) * tensor for weight, tensor in zip(weights, x)], self.d)
 
 

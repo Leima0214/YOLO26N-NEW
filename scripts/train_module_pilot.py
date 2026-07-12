@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import io
 import math
 import os
 import re
@@ -12,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from contextlib import contextmanager
 from datetime import datetime
@@ -26,6 +29,15 @@ PILOT_CSV = OUT_DIR / "pilot_report.csv"
 PILOT_MD = OUT_DIR / "pilot_report.md"
 PROJECT = ROOT / "runs" / "module_scan"
 MIN_TRANSFER_RATIO = 0.80
+TRUSTED_TIER_B_CHECKPOINTS = {
+    "yolo26n.pt": "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef",
+}
+TIER_B_TRANSFER_MINIMUMS = {
+    "transfer_numel_ratio": 0.95,
+    "backbone_transfer_ratio": 0.98,
+    "neck_transfer_ratio": 0.90,
+    "detect_transfer_ratio": 0.86,
+}
 
 FIELDS = [
     "timestamp",
@@ -131,19 +143,77 @@ def run_text(command: list[str]) -> str:
         return f"{type(e).__name__}: {e}\n"
 
 
-def save_repro_files(run_dir: Path, data_yaml: Path, command: str, pretrained: Path | None) -> None:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def set_run_state(run_dir: Path, state: str, detail: str = "") -> None:
+    if state not in {"RUNNING", "COMPLETED", "FAILED"}:
+        raise ValueError(f"Invalid run state: {state}")
+    for name in ("RUNNING", "COMPLETED", "FAILED"):
+        (run_dir / name).unlink(missing_ok=True)
+    atomic_write_text(run_dir / state, detail.rstrip() + "\n")
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=path.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def save_repro_files(
+    run_dir: Path,
+    model_yaml: Path,
+    data_yaml: Path,
+    command: str,
+    pretrained: Path | None,
+    checkpoint_sha256: str,
+) -> None:
     if not run_dir.is_dir():
         raise RuntimeError(f"Run directory was not reserved: {run_dir}")
     (run_dir / "git_commit.txt").write_text(run_text(["git", "rev-parse", "HEAD"]), encoding="utf-8")
     (run_dir / "git_branch.txt").write_text(run_text(["git", "branch", "--show-current"]), encoding="utf-8")
+    (run_dir / "git_status_porcelain.txt").write_text(run_text(["git", "status", "--porcelain"]), encoding="utf-8")
     (run_dir / "command.txt").write_text(command + "\n", encoding="utf-8")
     (run_dir / "pretrained.txt").write_text(f"{pretrained or 'scratch'}\n", encoding="utf-8")
+    (run_dir / "checkpoint_sha256.txt").write_text(f"{checkpoint_sha256 or 'scratch'}\n", encoding="utf-8")
     (run_dir / "python_version.txt").write_text(sys.version + "\n", encoding="utf-8")
     (run_dir / "torch_info.txt").write_text(torch_info(), encoding="utf-8")
     (run_dir / "nvidia_smi.txt").write_text(run_text(["nvidia-smi"]), encoding="utf-8")
     (run_dir / "pip_freeze.txt").write_text(run_text([sys.executable, "-m", "pip", "freeze"]), encoding="utf-8")
     if data_yaml.exists():
         shutil.copy2(data_yaml, run_dir / "data_yaml_snapshot.yaml")
+    shutil.copy2(model_yaml, run_dir / "model_yaml_snapshot.yaml")
+    (run_dir / "model_yaml_sha256.txt").write_text(file_sha256(model_yaml) + "\n", encoding="utf-8")
+
+
+def validate_tier_b_protocol(
+    yaml_path: Path, pretrained_path: Path | None, checkpoint_sha256: str, imgsz: int, batch: int
+) -> None:
+    if not re.fullmatch(r"yolo26n-Paper1-TierB(?:1[3-9]|2[0-4])-.+\.yaml", yaml_path.name):
+        return
+    if imgsz > 640 or imgsz % 32 or batch > 32:
+        raise SystemExit("Tier B pilots require --imgsz <= 640 divisible by 32 and --batch <= 32")
+    trusted_path = (ROOT / "yolo26n.pt").resolve()
+    if pretrained_path != trusted_path:
+        raise SystemExit("Tier B pilots require the trusted project-root yolo26n.pt checkpoint")
+    expected = TRUSTED_TIER_B_CHECKPOINTS["yolo26n.pt"]
+    if checkpoint_sha256 != expected:
+        raise SystemExit(
+            f"Tier B checkpoint SHA256 mismatch: expected {expected}, got {checkpoint_sha256 or 'missing'}"
+        )
 
 
 def torch_info() -> str:
@@ -165,10 +235,13 @@ def count_params(model) -> str:
         return ""
 
 
-def model_stats(model) -> tuple[str, str]:
+def model_stats(model, imgsz=640) -> tuple[str, str]:
     params = count_params(model)
     flops = ""
     try:
+        from ultralytics.utils.torch_utils import get_flops
+
+        flops = str(get_flops(getattr(model, "model", model), imgsz=imgsz))
         info = model.info(detailed=False, verbose=False)
     except Exception:
         return params, flops
@@ -361,7 +434,15 @@ def read_results(results_csv: Path) -> dict[str, object]:
     return out
 
 
-def write_pilot_markdown(rows: list[dict[str, str]]) -> None:
+def pilot_csv_text(rows: list[dict[str, object]]) -> str:
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=FIELDS)
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def write_pilot_markdown(rows: list[dict[str, object]]) -> None:
     lines = [
         "# YOLO26 Module Pilot Report",
         "",
@@ -377,7 +458,7 @@ def write_pilot_markdown(rows: list[dict[str, str]]) -> None:
             "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
             "{loss_decreased} | {recommended_next_step} |".format(**row)
         )
-    PILOT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    atomic_write_text(PILOT_MD, "\n".join(lines) + "\n")
 
 
 def ensure_templates() -> None:
@@ -390,29 +471,20 @@ def ensure_templates() -> None:
             rows = [{field: row.get(field, "") for field in FIELDS} for row in reader]
             migrated = reader.fieldnames != FIELDS
         if migrated:
-            with PILOT_CSV.open("w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=FIELDS)
-                writer.writeheader()
-                writer.writerows(rows)
+            atomic_write_text(PILOT_CSV, pilot_csv_text(rows))
     else:
-        with PILOT_CSV.open("w", newline="", encoding="utf-8") as f:
-            csv.DictWriter(f, fieldnames=FIELDS).writeheader()
-    if migrated or not PILOT_MD.exists():
-        write_pilot_markdown(rows)
+        atomic_write_text(PILOT_CSV, pilot_csv_text(rows))
+    write_pilot_markdown(rows)
 
 
 def append_row(row: dict[str, object]) -> None:
     with report_lock():
         ensure_templates()
-        with PILOT_CSV.open("a", newline="", encoding="utf-8") as f:
-            csv.DictWriter(f, fieldnames=FIELDS).writerow(row)
-        with PILOT_MD.open("a", encoding="utf-8") as f:
-            f.write(
-                "| {yaml_path} | {pretrained} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
-                "{transferred_numel}/{transfer_total_numel} ({transfer_numel_ratio}) | "
-                "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
-                "{loss_decreased} | {recommended_next_step} |\n".format(**row)
-            )
+        with PILOT_CSV.open("r", newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        rows.append(row)
+        atomic_write_text(PILOT_CSV, pilot_csv_text(rows))
+        write_pilot_markdown(rows)
 
 
 def parse_args() -> argparse.Namespace:
@@ -478,13 +550,16 @@ def main() -> None:
     )
     if pretrained_path is not None and not pretrained_path.exists():
         raise SystemExit(f"Missing pretrained checkpoint: {args.pretrained}")
+    checkpoint_sha256 = file_sha256(pretrained_path) if pretrained_path is not None else ""
+    validate_tier_b_protocol(yaml_path, pretrained_path, checkpoint_sha256, args.imgsz, args.batch)
     model_config = safe_load_yaml(yaml_path)
     safe_load_yaml(data_yaml)
 
     base = args.name or f"module_{module_name(yaml_path)}_japan7_e{args.epochs}_img{args.imgsz}_b{args.batch}_seed42"
     run_name, run_dir = reserve_run(base)
+    set_run_state(run_dir, "RUNNING", f"pid={os.getpid()}")
     command = shlex.join(sys.argv)
-    save_repro_files(run_dir, data_yaml, command, pretrained_path)
+    save_repro_files(run_dir, yaml_path, data_yaml, command, pretrained_path, checkpoint_sha256)
 
     row = {field: "" for field in FIELDS}
     row.update(
@@ -534,7 +609,15 @@ def main() -> None:
                     f"Only {report['transfer_numel_ratio']:.1%} of target parameter values match this YAML. "
                     "Use architecture-native weights, train with --pretrained none, or explicitly pass --allow-low-transfer."
                 )
-        row["params_if_available"], row["flops_if_available"] = model_stats(model)
+            if yaml_path.name.startswith("yolo26n-Paper1-TierB"):
+                failed = {
+                    name: (report[name], minimum)
+                    for name, minimum in TIER_B_TRANSFER_MINIMUMS.items()
+                    if report[name] < minimum
+                }
+                if failed:
+                    raise RuntimeError(f"Tier B semantic checkpoint coverage below required minimums: {failed}")
+        row["params_if_available"], row["flops_if_available"] = model_stats(model, args.imgsz)
         model.train(
             data=str(data_yaml),
             epochs=args.epochs,
@@ -577,6 +660,8 @@ def main() -> None:
     else:
         row["recommended_next_step"] = "review before promotion"
     append_row(row)
+    state = "COMPLETED" if row["status"] == "COMPLETED" else "FAILED"
+    set_run_state(run_dir, state, f"status={row['status']}\nerror={row['error_message_short']}")
     print(f"Wrote {PILOT_CSV}")
     print(f"Wrote {PILOT_MD}")
     print(f"Run dir: {run_dir}")

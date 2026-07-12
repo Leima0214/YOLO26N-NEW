@@ -1,6 +1,7 @@
 """Generate the Paper 1 Tier B three-module model YAMLs."""
 
 from pathlib import Path
+from types import MappingProxyType
 
 from generate_paper1_tiera_composites import ROOT, write_model
 
@@ -55,13 +56,14 @@ SPECS = [
         {"detail": "lap", "carafe": True, "fusion": "ffa"},
     ),
 ]
+ALLOWED_SPECS = MappingProxyType({name: MappingProxyType(dict(options)) for name, options in SPECS})
 
 
 def main():
     if len(SPECS) != 12 or len({name for name, _ in SPECS}) != 12:
         raise ValueError("Tier B must define exactly 12 unique YAML names")
     for filename, options in SPECS:
-        path = write_model(filename, options, Path(__file__).name)
+        path = write_model(filename, options, Path(__file__).name, ALLOWED_SPECS)
         print(path.relative_to(ROOT))
 
 

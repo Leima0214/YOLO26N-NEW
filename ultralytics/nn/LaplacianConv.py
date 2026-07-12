@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ultralytics.nn.modules.conv import autopad
+from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
 
 class LaplacianConv(nn.Module):
@@ -29,12 +30,24 @@ class LaplacianConv(nn.Module):
         self.register_buffer("laplacian_kernel", kernel.reshape(1, 1, 3, 3), persistent=False)
         self.alpha = nn.Parameter(torch.tensor(float(alpha_init)))
 
-    def forward(self, x):
+    def _enhance(self, x):
         channels = x.shape[1]
         kernel = self.laplacian_kernel.to(dtype=x.dtype).expand(channels, 1, 3, 3)
         edge = F.conv2d(x, kernel, padding=1, groups=channels)
-        enhanced = x + 0.1 * torch.tanh(self.alpha) * edge
-        return self.act(self.bn(self.conv(enhanced)))
+        return x + 0.1 * torch.tanh(self.alpha) * edge
+
+    def forward(self, x):
+        return self.act(self.bn(self.conv(self._enhance(x))))
+
+    def forward_fuse(self, x):
+        return self.act(self.conv(self._enhance(x)))
+
+    def fuse_convs(self):
+        """Fuse the transfer-compatible Conv-BN path for deployment."""
+        if hasattr(self, "bn"):
+            self.conv = fuse_conv_and_bn(self.conv, self.bn)
+            delattr(self, "bn")
+            self.forward = self.forward_fuse
 
 
 __all__ = ("LaplacianConv",)
