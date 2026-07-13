@@ -172,6 +172,23 @@ Run `signal_Paper1_A2_BoundedShapeLoss_japan7_e30_img640_b32_pretrained_amp_seed
 
 A2 was active rather than numerically inert: its first-batch weighted penalty was `3.1%-3.5%` of CIoU and its gradient norm was `10.4%-11.4%` of the CIoU gradient. Nevertheless, it reduced D10 AP50 by `0.019` and D10 AP50-95 by `0.009`. Matched 30e assignment diagnostics also showed no mechanism gain: B0 to A2 D10 one2many median candidate CIoU changed `0.8169 -> 0.8158`, median class score `0.1779 -> 0.1755`, and both retained effectively ten positives per GT. At fixed mechanism-screening thresholds of candidate CIoU at least `0.5` and correct-class score below `0.25`, `60.7%` of B0 D10 GTs were localization-adequate but classification-low, versus `25.0%` across the other five classes. These are diagnostic thresholds, not detector metrics. Reject A2 from 100e, weight sweeps, and the final composite. The next authorized design task is a class-agnostic B2 mechanism for high-quality matched positives with low classification confidence; it requires audit and smoke before any signal run.
 
+### 2026-07-13 B2 Quality-Aware Hard Positive Classification
+
+Run `signal_Paper1_B2_QualityHardPositive_japan7_e30_img640_b32_pretrained_amp_seed42_20260713_174400` used commit `9f7bb9d`, trusted `yolo26n.pt`, full `708/708` transfer, AMP, the cleaned Japan7 dataset, 30 epochs, image size 640, batch 32, and seed 42. B2 keeps the baseline architecture, assigner, localization loss, and inference unchanged. It applies the bounded, detached, class-agnostic target-class BCE multiplier `1 + 0.25 * CIoU * (1 - correct_class_confidence)` to assigned positives only.
+
+| model | Params | FLOPs | P | R | mAP50 | mAP50-95 | decision |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| current canonical B0 | 2.376M | 5.2G | 0.587 | 0.561 | 0.574 | 0.319 | control |
+| B2 quality-aware hard positive | 2.376M | 5.2G | 0.587 | 0.553 | 0.571 | 0.317 | reject; no 100e/composite |
+| delta (B2 - B0) | 0 | 0 | 0.000 | -0.008 | -0.003 | -0.002 | fails accuracy and recall gates |
+
+| model | D00 | D10 | D20 | D40 | D43 | D44 | D50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| B0 AP50/AP50-95 | 0.397/0.193 | 0.324/0.130 | 0.657/0.348 | 0.434/0.189 | 0.760/0.537 | 0.697/0.439 | 0.750/0.397 |
+| B2 AP50/AP50-95 | 0.393/0.192 | 0.297/0.117 | 0.660/0.348 | 0.435/0.187 | 0.764/0.535 | 0.697/0.438 | 0.752/0.404 |
+
+The best checkpoint is epoch 30 (`mAP50-95=0.31735`), so there is no late-epoch reversal signal. The B2 smoke had full transfer, finite gradients, bounded boost (`max=0.238`), and non-dominant added classification gradients (`18.2%` in both E2E branches). The failure is therefore scientific rather than mechanical: increasing BCE pressure on low-confidence but adequately localized positives does not repair D10 and reduces recall. Reject B2 from 100e, lambda sweeps, and all composites.
+
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 
 These are the two completed 100 epoch module runs discussed yesterday. Both trained successfully, but neither beat the historical YOLO26n baseline.

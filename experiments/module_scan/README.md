@@ -116,4 +116,4 @@ The completed A2 smoke passed those gates, but its matched 30e signal tied B0 at
 
 `paper1_b2_adversarial_audit.md` and `.json` record `65/65` checks passing under normal Python and `python -O` on the remote RTX 4090. The audit covers exact weight-zero full-loss and parameter-gradient equivalence, both E2E branches, `708/708` bitwise checkpoint transfer, CUDA AMP, empty targets, malformed strengths, bounded weighting, and finite gradients. The synthetic assigned-positive probe added `7.07%` and `12.52%` of the baseline classification-gradient norm in the one-to-many and one-to-one branches, respectively.
 
-This authorizes one 1e smoke only. Use `--expect-loss ciou`, `--expect-hard-positive-cls-weight 0.25`, `--expect-transfer 708/708`, and the trusted checkpoint SHA256. Review `b2_hard_positive_diagnostics.json` before any 30e decision. No B2 30e/100e run or B2+C combination is currently authorized.
+The B2 smoke passed its artifact and numerical gates, but the matched 30e signal reached `0.571/0.317` mAP50/mAP50-95 versus B0 `0.574/0.319`; D10 fell `0.324/0.130 -> 0.297/0.117` AP50/AP50-95. B2 is rejected from 100e, lambda sweeps, and B2+C combinations.
