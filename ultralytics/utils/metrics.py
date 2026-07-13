@@ -147,6 +147,43 @@ def bbox_iou(
     return iou  # IoU
 
 
+def shape_iou(
+    box1: torch.Tensor, box2: torch.Tensor, xywh: bool = True, scale: float = 0.0, eps: float = 1e-7
+) -> torch.Tensor:
+    """Calculate Shape-IoU for boxes in xywh or xyxy format (https://arxiv.org/abs/2312.17663)."""
+    if xywh:
+        (x1, y1, w1, h1), (x2, y2, w2, h2) = box1.chunk(4, -1), box2.chunk(4, -1)
+        w1, h1, w2, h2 = (x.clamp_min(eps) for x in (w1, h1, w2, h2))
+        w1_, h1_, w2_, h2_ = w1 / 2, h1 / 2, w2 / 2, h2 / 2
+        b1_x1, b1_x2, b1_y1, b1_y2 = x1 - w1_, x1 + w1_, y1 - h1_, y1 + h1_
+        b2_x1, b2_x2, b2_y1, b2_y2 = x2 - w2_, x2 + w2_, y2 - h2_, y2 + h2_
+    else:
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1.chunk(4, -1)
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2.chunk(4, -1)
+        w1, h1 = (b1_x2 - b1_x1).clamp_min(eps), (b1_y2 - b1_y1).clamp_min(eps)
+        w2, h2 = (b2_x2 - b2_x1).clamp_min(eps), (b2_y2 - b2_y1).clamp_min(eps)
+
+    inter = (b1_x2.minimum(b2_x2) - b1_x1.maximum(b2_x1)).clamp(0) * (
+        b1_y2.minimum(b2_y2) - b1_y1.maximum(b2_y1)
+    ).clamp(0)
+    iou = inter / (w1 * h1 + w2 * h2 - inter + eps)
+
+    scale_denominator = w2.pow(scale) + h2.pow(scale)
+    width_weight = 2 * w2.pow(scale) / scale_denominator
+    height_weight = 2 * h2.pow(scale) / scale_denominator
+    convex_width = b1_x2.maximum(b2_x2) - b1_x1.minimum(b2_x1)
+    convex_height = b1_y2.maximum(b2_y2) - b1_y1.minimum(b2_y1)
+    convex_diagonal = convex_width.pow(2) + convex_height.pow(2) + eps
+    center_x = (b2_x1 + b2_x2 - b1_x1 - b1_x2).pow(2) / 4
+    center_y = (b2_y1 + b2_y2 - b1_y1 - b1_y2).pow(2) / 4
+    distance = (height_weight * center_x + width_weight * center_y) / convex_diagonal
+
+    width_cost = height_weight * (w1 - w2).abs() / w1.maximum(w2)
+    height_cost = width_weight * (h1 - h2).abs() / h1.maximum(h2)
+    shape_cost = (1 - (-width_cost).exp()).pow(4) + (1 - (-height_cost).exp()).pow(4)
+    return iou - distance - 0.5 * shape_cost
+
+
 def mask_iou(mask1: torch.Tensor, mask2: torch.Tensor, eps: float = 1e-7) -> torch.Tensor:
     """Calculate masks IoU.
 

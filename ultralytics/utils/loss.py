@@ -15,7 +15,7 @@ from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
 from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors
 from ultralytics.utils.torch_utils import autocast
 
-from .metrics import bbox_iou, probiou
+from .metrics import bbox_iou, probiou, shape_iou
 from .tal import bbox2dist, rbox2dist
 
 
@@ -110,9 +110,14 @@ class DFLoss(nn.Module):
 class BboxLoss(nn.Module):
     """Criterion class for computing training losses for bounding boxes."""
 
-    def __init__(self, reg_max: int = 16):
+    def __init__(self, reg_max: int = 16, shape_iou_scale: float | None = None):
         """Initialize the BboxLoss module with regularization maximum and DFL settings."""
         super().__init__()
+        if shape_iou_scale is not None:
+            shape_iou_scale = float(shape_iou_scale)
+        if shape_iou_scale is not None and (not math.isfinite(shape_iou_scale) or shape_iou_scale < 0):
+            raise ValueError("shape_iou_scale must be finite and non-negative")
+        self.shape_iou_scale = shape_iou_scale
         self.dfl_loss = DFLoss(reg_max) if reg_max > 1 else None
 
     def forward(
@@ -129,7 +134,12 @@ class BboxLoss(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute IoU and DFL losses for bounding boxes."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        iou = bbox_iou(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
+        if self.shape_iou_scale is None:
+            iou = bbox_iou(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
+        else:
+            iou = shape_iou(
+                pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, scale=self.shape_iou_scale
+            )
         loss_iou = ((1.0 - iou) * weight).sum() / target_scores_sum
 
         # DFL loss
@@ -358,7 +368,7 @@ class v8DetectionLoss:
             stride=self.stride.tolist(),
             topk2=tal_topk2,
         )
-        self.bbox_loss = BboxLoss(m.reg_max).to(device)
+        self.bbox_loss = BboxLoss(m.reg_max, shape_iou_scale=model.yaml.get("shape_iou_scale")).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
 
     def preprocess(self, targets: torch.Tensor, batch_size: int, scale_tensor: torch.Tensor) -> torch.Tensor:
