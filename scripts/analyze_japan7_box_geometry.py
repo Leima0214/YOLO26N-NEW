@@ -118,7 +118,14 @@ def analyze_split(root: Path, entry: str, split: str, names: dict[int, str], img
 
     records = defaultdict(list)
     class_images = defaultdict(set)
-    totals = {"images": 0, "boxes": 0, "missing_labels": 0, "empty_labels": 0, "invalid_lines": 0}
+    totals = {
+        "images": 0,
+        "boxes": 0,
+        "missing_labels": 0,
+        "empty_labels": 0,
+        "duplicate_labels": 0,
+        "invalid_lines": 0,
+    }
     image_paths = sorted(path for path in image_dir.rglob("*") if path.suffix.lower() in IMAGE_SUFFIXES)
     totals["images"] = len(image_paths)
 
@@ -138,6 +145,7 @@ def analyze_split(root: Path, entry: str, split: str, names: dict[int, str], img
             totals["invalid_lines"] += len(lines)
             continue
 
+        seen_boxes = set()
         for line in lines:
             fields = line.split()
             try:
@@ -154,6 +162,11 @@ def analyze_split(root: Path, entry: str, split: str, names: dict[int, str], img
             ):
                 totals["invalid_lines"] += 1
                 continue
+            box_key = (class_id, center_x, center_y, normalized_width, normalized_height)
+            if box_key in seen_boxes:
+                totals["duplicate_labels"] += 1
+                continue
+            seen_boxes.add(box_key)
             width, height = box_at_imgsz(image_width, image_height, normalized_width, normalized_height, imgsz)
             records[class_id].append((width, height))
             class_images[class_id].add(relative.as_posix())
@@ -189,11 +202,19 @@ def write_reports(rows: list[dict], totals: dict[str, dict], data_path: Path, im
             f"{row['small_lt_32sq_pct']:.1f} | {row['min_side_lt_16px_pct']:.1f} | "
             f"{row['median_aspect_ratio']:.2f} | {row['aspect_ge_3_pct']:.1f} |"
         )
-    lines.extend(["", "## Split Integrity", "", "| split | images | boxes | missing labels | empty labels | invalid lines |", "| --- | ---: | ---: | ---: | ---: | ---: |"])
+    lines.extend(
+        [
+            "",
+            "## Split Integrity",
+            "",
+            "| split | images | boxes | missing labels | empty labels | duplicate labels | invalid lines |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
     for split, values in totals.items():
         lines.append(
             f"| {split} | {values['images']} | {values['boxes']} | {values['missing_labels']} | "
-            f"{values['empty_labels']} | {values['invalid_lines']} |"
+            f"{values['empty_labels']} | {values['duplicate_labels']} | {values['invalid_lines']} |"
         )
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return csv_path, md_path
