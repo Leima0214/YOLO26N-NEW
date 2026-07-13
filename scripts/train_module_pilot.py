@@ -538,6 +538,11 @@ def parse_args() -> argparse.Namespace:
         help="Abort before training unless elongation_penalty_weight equals this value.",
     )
     parser.add_argument(
+        "--expect-hard-positive-cls-weight",
+        type=float,
+        help="Abort before training unless hard_positive_cls_weight equals this value.",
+    )
+    parser.add_argument(
         "--expect-checkpoint-sha256",
         help="Abort before training unless the pretrained checkpoint has this SHA256.",
     )
@@ -580,19 +585,25 @@ def main() -> None:
     safe_load_yaml(data_yaml)
     shape_iou_scale = model_config.get("shape_iou_scale")
     elongation_weight = model_config.get("elongation_penalty_weight", 0.0)
-    if isinstance(shape_iou_scale, bool) or isinstance(elongation_weight, bool):
-        raise SystemExit("Localization-loss weights must be numeric, not bool")
+    hard_positive_weight = model_config.get("hard_positive_cls_weight", 0.0)
+    if any(isinstance(value, bool) for value in (shape_iou_scale, elongation_weight, hard_positive_weight)):
+        raise SystemExit("Loss weights must be numeric, not bool")
     try:
         shape_iou_scale = None if shape_iou_scale is None else float(shape_iou_scale)
         elongation_weight = float(elongation_weight)
+        hard_positive_weight = float(hard_positive_weight)
     except (TypeError, ValueError) as error:
-        raise SystemExit("Localization-loss weights must be numeric") from error
+        raise SystemExit("Loss weights must be numeric") from error
     if shape_iou_scale is not None and (not math.isfinite(shape_iou_scale) or shape_iou_scale < 0):
         raise SystemExit("shape_iou_scale must be finite and non-negative")
     if not math.isfinite(elongation_weight) or not 0.0 <= elongation_weight <= 1.0:
         raise SystemExit("elongation_penalty_weight must be finite and in [0, 1]")
     if shape_iou_scale is not None and elongation_weight:
         raise SystemExit("Shape-IoU and bounded elongation cannot be enabled together")
+    if not math.isfinite(hard_positive_weight) or not 0.0 <= hard_positive_weight <= 1.0:
+        raise SystemExit("hard_positive_cls_weight must be finite and in [0, 1]")
+    if hard_positive_weight and (shape_iou_scale is not None or elongation_weight):
+        raise SystemExit("B2 hard-positive classification must remain separate from A localization candidates")
     localization_loss = (
         "shape_iou" if shape_iou_scale is not None else "ciou_bounded_elongation" if elongation_weight else "ciou"
     )
@@ -601,6 +612,10 @@ def main() -> None:
     if args.expect_elongation_weight is not None and args.expect_elongation_weight != elongation_weight:
         raise SystemExit(
             f"Expected elongation_penalty_weight={args.expect_elongation_weight}, got {elongation_weight}"
+        )
+    if args.expect_hard_positive_cls_weight is not None and args.expect_hard_positive_cls_weight != hard_positive_weight:
+        raise SystemExit(
+            f"Expected hard_positive_cls_weight={args.expect_hard_positive_cls_weight}, got {hard_positive_weight}"
         )
     if args.expect_checkpoint_sha256 and args.expect_checkpoint_sha256.lower() != checkpoint_sha256.lower():
         raise SystemExit(
@@ -615,6 +630,9 @@ def main() -> None:
     print(f"localization_loss={loss_display}")
     print(f"loss_signature={localization_loss}")
     print(f"elongation_penalty_weight={elongation_weight}")
+    classification_loss = "bce_quality_hard_positive" if hard_positive_weight else "bce"
+    print(f"classification_loss={classification_loss}")
+    print(f"hard_positive_cls_weight={hard_positive_weight}")
 
     base = args.name or f"module_{module_name(yaml_path)}_japan7_e{args.epochs}_img{args.imgsz}_b{args.batch}_seed42"
     run_name, run_dir = reserve_run(base)
@@ -623,6 +641,8 @@ def main() -> None:
     save_repro_files(run_dir, yaml_path, data_yaml, command, pretrained_path, checkpoint_sha256)
     atomic_write_text(run_dir / "localization_loss.txt", localization_loss + "\n")
     atomic_write_text(run_dir / "elongation_penalty_weight.txt", f"{elongation_weight}\n")
+    atomic_write_text(run_dir / "classification_loss.txt", classification_loss + "\n")
+    atomic_write_text(run_dir / "hard_positive_cls_weight.txt", f"{hard_positive_weight}\n")
 
     row = {field: "" for field in FIELDS}
     row.update(
@@ -714,6 +734,38 @@ def main() -> None:
 
             model.add_callback("on_train_start", enable_a2_diagnostics)
             model.add_callback("on_train_batch_end", save_a2_diagnostics)
+        if hard_positive_weight:
+            b2_diagnostics_saved = False
+
+            def enable_b2_diagnostics(trainer) -> None:
+                network = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
+                if getattr(network, "criterion", None) is None:
+                    network.criterion = network.init_criterion()
+                for branch in (network.criterion.one2many, network.criterion.one2one):
+                    branch.collect_cls_diagnostics_once = True
+
+            def save_b2_diagnostics(trainer) -> None:
+                nonlocal b2_diagnostics_saved
+                if b2_diagnostics_saved:
+                    return
+                network = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
+                criterion = getattr(network, "criterion", None)
+                if criterion is None:
+                    return
+                diagnostics = {
+                    name: getattr(getattr(criterion, name), "last_cls_diagnostics", None)
+                    for name in ("one2many", "one2one")
+                }
+                if not all(diagnostics.values()):
+                    return
+                atomic_write_text(
+                    run_dir / "b2_hard_positive_diagnostics.json",
+                    json.dumps(diagnostics, indent=2, sort_keys=True) + "\n",
+                )
+                b2_diagnostics_saved = True
+
+            model.add_callback("on_train_start", enable_b2_diagnostics)
+            model.add_callback("on_train_batch_end", save_b2_diagnostics)
         model.train(
             data=str(data_yaml),
             epochs=args.epochs,

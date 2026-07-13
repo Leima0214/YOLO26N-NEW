@@ -171,6 +171,54 @@ def bbox_regression_iou_loss(
     return loss
 
 
+def quality_hard_positive_weights(
+    pred_scores: torch.Tensor,
+    target_scores: torch.Tensor,
+    pred_bboxes: torch.Tensor,
+    target_bboxes: torch.Tensor,
+    fg_mask: torch.Tensor,
+    strength: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return bounded class-agnostic BCE weights for well-localized, low-confidence positives."""
+    if isinstance(strength, bool):
+        raise TypeError("hard-positive strength must be numeric, not bool")
+    strength = float(strength)
+    if not math.isfinite(strength) or not 0.0 <= strength <= 1.0:
+        raise ValueError("hard-positive strength must be finite and in [0, 1]")
+    if pred_scores.shape != target_scores.shape or pred_scores.ndim != 3:
+        raise ValueError("prediction and target scores must have the same [batch, anchors, classes] shape")
+    if pred_bboxes.shape != target_bboxes.shape or pred_bboxes.shape[:2] != pred_scores.shape[:2]:
+        raise ValueError("prediction and target boxes must have the same [batch, anchors, 4] shape")
+    if pred_bboxes.ndim != 3 or pred_bboxes.shape[-1] != 4 or fg_mask.shape != pred_scores.shape[:2]:
+        raise ValueError("boxes or foreground mask have invalid shapes")
+    if not all(tensor.device == pred_scores.device for tensor in (target_scores, pred_bboxes, target_bboxes, fg_mask)):
+        raise ValueError("hard-positive tensors must share one device")
+
+    weights = torch.ones_like(pred_scores)
+    if not strength or not fg_mask.any():
+        empty = pred_scores.new_empty((0, 1), dtype=torch.float32)
+        return weights, empty, empty, empty
+
+    positive_targets = target_scores[fg_mask]
+    positive_classes = positive_targets.gt(0)
+    if not positive_classes.any():
+        empty = pred_scores.new_empty((0, 1), dtype=torch.float32)
+        return weights, empty, empty, empty
+    quality = bbox_iou(
+        pred_bboxes[fg_mask].detach().float(),
+        target_bboxes[fg_mask].detach().float(),
+        xywh=False,
+        CIoU=True,
+    ).clamp_(0.0, 1.0)
+    confidence = (
+        pred_scores[fg_mask].detach().float().sigmoid() * positive_classes.float()
+    ).sum(-1, keepdim=True) / positive_classes.sum(-1, keepdim=True).clamp_min(1)
+    boost = strength * quality * (1.0 - confidence)
+    positive_weights = 1.0 + boost.to(pred_scores.dtype) * positive_classes.to(pred_scores.dtype)
+    weights[fg_mask] = positive_weights
+    return weights, quality, confidence, boost
+
+
 class BboxLoss(nn.Module):
     """Criterion class for computing training losses for bounding boxes."""
 
@@ -488,6 +536,15 @@ class v8DetectionLoss:
         self.reg_max = m.reg_max
         self.device = device
 
+        hard_positive_weight = model.yaml.get("hard_positive_cls_weight", 0.0)
+        if isinstance(hard_positive_weight, bool):
+            raise TypeError("hard_positive_cls_weight must be numeric, not bool")
+        self.hard_positive_cls_weight = float(hard_positive_weight)
+        if not math.isfinite(self.hard_positive_cls_weight) or not 0.0 <= self.hard_positive_cls_weight <= 1.0:
+            raise ValueError("hard_positive_cls_weight must be finite and in [0, 1]")
+        self.collect_cls_diagnostics_once = False
+        self.last_cls_diagnostics = None
+
         self.use_dfl = m.reg_max > 1
 
         self.assigner = TaskAlignedAssigner(
@@ -531,6 +588,51 @@ class v8DetectionLoss:
             # pred_dist = (pred_dist.view(b, a, c // 4, 4).softmax(2) * self.proj.type(pred_dist.dtype).view(1, 1, -1, 1)).sum(2)
         return dist2bbox(pred_dist, anchor_points, xywh=False)
 
+    def classification_loss(
+        self,
+        pred_scores: torch.Tensor,
+        target_scores: torch.Tensor,
+        pred_bboxes: torch.Tensor,
+        target_bboxes: torch.Tensor,
+        stride_tensor: torch.Tensor,
+        fg_mask: torch.Tensor,
+        target_scores_sum: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute baseline BCE or the bounded quality-aware hard-positive variant."""
+        target_scores = target_scores.to(pred_scores.dtype)
+        bce = self.bce(pred_scores, target_scores)
+        if not self.hard_positive_cls_weight:
+            return bce.sum() / target_scores_sum
+
+        weights, quality, confidence, boost = quality_hard_positive_weights(
+            pred_scores,
+            target_scores,
+            pred_bboxes,
+            target_bboxes / stride_tensor,
+            fg_mask,
+            self.hard_positive_cls_weight,
+        )
+        base_loss = bce.sum() / target_scores_sum
+        added_loss = (bce * (weights - 1.0)).sum() / target_scores_sum
+        if self.collect_cls_diagnostics_once and boost.numel():
+            base_grad = torch.autograd.grad(base_loss, pred_scores, retain_graph=True)[0].float().norm()
+            added_grad = torch.autograd.grad(added_loss, pred_scores, retain_graph=True)[0].float().norm()
+            self.last_cls_diagnostics = {
+                "positive_count": int(fg_mask.sum().item()),
+                "base_bce": float(base_loss.item()),
+                "added_bce": float(added_loss.item()),
+                "added_to_base_ratio": float((added_loss / base_loss.clamp_min(1e-12)).item()),
+                "quality_mean": float(quality.mean().item()),
+                "correct_confidence_mean": float(confidence.mean().item()),
+                "boost_mean": float(boost.mean().item()),
+                "boost_max": float(boost.max().item()),
+                "base_grad_norm": float(base_grad.item()),
+                "added_grad_norm": float(added_grad.item()),
+                "grad_norm_ratio": float((added_grad / base_grad.clamp_min(1e-12)).item()),
+            }
+            self.collect_cls_diagnostics_once = False
+        return base_loss + added_loss
+
     def get_assigned_targets_and_loss(self, preds: dict[str, torch.Tensor], batch: dict[str, Any]) -> tuple:
         """Calculate the sum of the loss for box, cls and dfl multiplied by batch size and return foreground mask and
         target indices.
@@ -567,7 +669,15 @@ class v8DetectionLoss:
         target_scores_sum = max(target_scores.sum(), 1)
 
         # Cls loss
-        loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+        loss[1] = self.classification_loss(
+            pred_scores,
+            target_scores,
+            pred_bboxes,
+            target_bboxes,
+            stride_tensor,
+            fg_mask,
+            target_scores_sum,
+        )
 
         # Bbox loss
         if fg_mask.sum():
