@@ -187,7 +187,7 @@ Run `signal_Paper1_B2_QualityHardPositive_japan7_e30_img640_b32_pretrained_amp_s
 | B0 AP50/AP50-95 | 0.397/0.193 | 0.324/0.130 | 0.657/0.348 | 0.434/0.189 | 0.760/0.537 | 0.697/0.439 | 0.750/0.397 |
 | B2 AP50/AP50-95 | 0.393/0.192 | 0.297/0.117 | 0.660/0.348 | 0.435/0.187 | 0.764/0.535 | 0.697/0.438 | 0.752/0.404 |
 
-The best checkpoint is epoch 30 (`mAP50-95=0.31735`), so there is no late-epoch reversal signal. The B2 smoke had full transfer, finite gradients, bounded boost (`max=0.238`), and non-dominant added classification gradients (`18.2%` in both E2E branches). The failure is therefore scientific rather than mechanical: increasing BCE pressure on low-confidence but adequately localized positives does not repair D10 and reduces recall. Reject B2 from 100e, lambda sweeps, and all composites.
+The best checkpoint is epoch 30 (`mAP50-95=0.31735`), with a slow late increase from `0.31364` at epoch 25. That trend does not offset the clear D10 deficit, and there is no D10 recovery signal that justifies a 100 epoch allocation. The B2 smoke had full transfer, finite gradients, bounded boost (`max=0.238`), and non-dominant added classification gradients (`18.2%` in both E2E branches). The failure is therefore scientific rather than mechanical: increasing BCE pressure on low-confidence but adequately localized positives does not repair D10 and reduces recall. Reject B2 from 100e, lambda sweeps, and all composites.
 
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 
