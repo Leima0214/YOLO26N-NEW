@@ -214,9 +214,15 @@ WDR is technically shape-compatible with the remaining S1/S2/S3 ideas, but S4 fa
 
 S4 finished below `0.319`, so W1-W3 are frozen and removed from the experiment queue. Do not force a three-module paper model when the single and pair evidence is negative.
 
-### Next Single-Module Queue
+### 2026-07-13 Japan7 Bottleneck Diagnosis
 
-Before judging gains near `+0.003`, reproduce B0 for 30 epochs at the current commit and GPU environment. Then smoke-test the transfer-friendly single-module `yolo26-LaplacianConv.yaml`; it preserves the baseline Conv-BN parameter path and adds only a bounded, zero-initialized Laplacian residual. The 2026-07-13 local audit passed exact pretrained output equivalence, fused-output equivalence, nonzero finite first-step `alpha` gradient, `708/709` tensor transfer, `99.999961%` parameter-weighted transfer, and full neck/Detect transfer. It adds exactly one trainable scalar over the matched baseline architecture. If its matched 30e result is below the new B0, reject it without 100e. SEAttention-P3 is the fallback single-module candidate. Tier B, P2/P2Lite, SPDConv, FDConv/FDRConv, and three-module experiments remain outside the current queue.
+The current-environment B0 at commit `6c34d74` reproduced `0.574/0.319` mAP50/mAP50-95 with full `708/708` transfer. Geometry analysis at the 640 letterbox scale disproved the working assumption that D00/D10 are primarily small boxes: validation small-box shares are only `6.3%` and `5.8%`. D10 is instead strongly elongated: median box size `137.6 x 26.7`, median aspect ratio `5.03`, and `92.2%` of boxes have aspect ratio at least 3. D00 has median size `64.0 x 91.7` and median aspect ratio `1.58`.
+
+The normalized B0 confusion matrix shows foreground misses rather than D00/D10 class confusion: approximately `65%` of D00 and `76%` of D10 targets fall into background, while cross-confusion between D00 and D10 is about `1%`. A no-training 960 validation reduced overall mAP50-95 from `0.319` to `0.268`, D00 from `0.192` to `0.178`, and D10 from `0.129` to `0.102`; naive input enlargement is rejected.
+
+The dataset audit also found one zero-width D20 training label (`Japan_Japan_001265.txt`, line 4) and one duplicated validation label removed by Ultralytics. These must be corrected in the source dataset and the derived Japan7 dataset rebuilt before formal runs; do not hand-edit only the derived copy.
+
+P2/P2Lite, generic detail blocks, LaplacianConv, and attention scanning are paused. The next method investigation remains YOLO26n-based and targets the measured failure: aspect-ratio-aware localization for elongated boxes plus foreground-recall learning. The existing `ultralytics/utils/shapeloss.py` is not authorized for training: `DetectionModel` does not select it, it duplicates the full loss implementation, and its `shape_iou` import does not resolve to the existing implementation in `shapemetrics.py`. Implement and audit a minimal selectable loss path before any smoke or 30e run.
 
 ### Decision Rules
 
