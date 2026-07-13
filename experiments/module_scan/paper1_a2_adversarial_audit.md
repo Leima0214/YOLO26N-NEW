@@ -1,10 +1,10 @@
 # Paper 1 A2 Adversarial Audit
 
 - status: `PASS`
-- git commit: `79d1562cce5c5f6e40580974eb2f45194756364b`
-- checks passed: `246`
+- git commit: `33be9d86c4ea2541f24c145f75a706d0e0d66b4e`
+- checks passed: `251`
 - checkpoint SHA256: `9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef`
-- loss.py SHA256: `101374bb1b1d1165dc35714d592b192213a4fd6c078ee9f456ef63a1309316c5`
+- loss.py SHA256: `21ad7fa3d1fcfcea78d77df35ba7b234d84b9529a841f2bd56de0675cc1baf1d`
 - A2 YAML SHA256: `4a588c7f8e9c42edfa573c3eadb1d5b51252868e0fb905fd5f3cb483f9b9081a`
 - torch/CUDA: `2.8.0+cu128` / `12.8`
 - CUDA device: `NVIDIA GeForce RTX 2060`
@@ -14,6 +14,42 @@
 
 ```json
 {
+  "a2_one2many_assigned_positive_probe": {
+    "base_ciou_grad_norm": 0.042182184755802155,
+    "base_ciou_mean": 0.6228004097938538,
+    "base_ciou_weighted": 0.5352506637573242,
+    "bounded_penalty_mean": 0.5284682512283325,
+    "grad_norm_ratio": 0.08748739212751389,
+    "penalty_grad_norm": 0.0036904094740748405,
+    "penalty_mean_by_ar": {
+      "2to3": null,
+      "3to5": 0.458636999130249,
+      "5to8": 0.775534451007843,
+      "ge8": 0.918727457523346,
+      "lt2": 0.0
+    },
+    "positive_count": 39,
+    "weighted_penalty": 0.03092050366103649,
+    "weighted_penalty_to_ciou": 0.05776826664805412
+  },
+  "a2_one2one_assigned_positive_probe": {
+    "base_ciou_grad_norm": 0.11992879956960678,
+    "base_ciou_mean": 0.5095163583755493,
+    "base_ciou_weighted": 0.4414278268814087,
+    "bounded_penalty_mean": 0.4238513708114624,
+    "grad_norm_ratio": 0.09915390610694885,
+    "penalty_grad_norm": 0.011891408823430538,
+    "penalty_mean_by_ar": {
+      "2to3": null,
+      "3to5": 0.15470343828201294,
+      "5to8": 0.6388086080551147,
+      "ge8": 0.9018934965133667,
+      "lt2": 0.0
+    },
+    "positive_count": 4,
+    "weighted_penalty": 0.03360963240265846,
+    "weighted_penalty_to_ciou": 0.0761384516954422
+  },
   "fp16_extreme_matrix": {
     "penalty_max": 0.8823529481887817,
     "penalty_min": 0.0,
@@ -289,3 +325,8 @@
 - PASS: A2 empty-target loss finite
 - PASS: A2 empty-target backward gradients finite
 - PASS: A2 one2many and one2one both use CIoU plus weight 0.1
+- PASS: A2 diagnostics captured for both E2E branches
+- PASS: A2 one2many diagnostic has assigned positives
+- PASS: A2 one2many diagnostic values are finite
+- PASS: A2 one2one diagnostic has assigned positives
+- PASS: A2 one2one diagnostic values are finite
