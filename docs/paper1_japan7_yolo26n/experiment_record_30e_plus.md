@@ -138,6 +138,23 @@ The best checkpoint occurred at epoch 30, but the matched B0 was also still impr
 
 The remote run contains `results.csv`, `args.yaml`, both weights, model/data snapshots, commit/branch/status, command, checkpoint/model hashes, transfer metadata, and environment snapshots. `best_validation_log.txt` preserves a repeat validation with complete per-class output. The original training stdout was not redirected to a file and cannot be reconstructed; `results.csv` is the authoritative epoch curve.
 
+### 2026-07-13 A1 Standard Shape-IoU
+
+Run `signal_Paper1_ShapeIoU_s1_japan7_e30_img640_b32_pretrained_amp_seed42_20260713_134524` used commit `3d9d448`, `yolo26n.pt`, full `708/708` transfer, AMP, the cleaned Japan7 dataset, 30 epochs, image size 640, batch 32, and seed 42. A1 changes only the training-time box regression from CIoU to standard Shape-IoU with scale 1; architecture, classification loss, assigner, Params, FLOPs, and inference remain baseline-identical.
+
+| model | Params | FLOPs | P | R | mAP50 | mAP50-95 | decision |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| current canonical B0 | 2.376M | 5.2G | 0.587 | 0.561 | 0.574 | 0.319 | control |
+| A1 standard Shape-IoU | 2.376M | 5.2G | 0.603 | 0.548 | 0.573 | 0.318 | retain as neutral comparison; no 100e |
+| delta (A1 - B0) | 0 | 0 | +0.016 | -0.013 | -0.001 | -0.001 | fails promotion gate |
+
+| model | D00 | D10 | D20 | D40 | D43 | D44 | D50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| B0 AP50/AP50-95 | 0.397/0.193 | 0.324/0.130 | 0.657/0.348 | 0.434/0.189 | 0.760/0.537 | 0.697/0.439 | 0.750/0.397 |
+| A1 AP50/AP50-95 | 0.405/0.193 | 0.308/0.124 | 0.660/0.350 | 0.440/0.189 | 0.756/0.528 | 0.698/0.439 | 0.741/0.404 |
+
+A1 raises precision but reduces recall, overall mAP50-95, and the target D10 AP50/AP50-95. It is reproducible evidence that direct Shape-IoU replacement does not solve the measured D10 failure. Keep its YAML, code path, and run artifacts as a method-selection comparison, but do not include it in the final composite or promote it to 100e. A2 retains baseline CIoU and adds a configurable bounded elongation penalty; `lambda=0` is required to recover baseline loss and gradients exactly.
+
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 
 These are the two completed 100 epoch module runs discussed yesterday. Both trained successfully, but neither beat the historical YOLO26n baseline.

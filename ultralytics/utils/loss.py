@@ -107,17 +107,59 @@ class DFLoss(nn.Module):
         ).mean(-1, keepdim=True)
 
 
+def bounded_elongation_penalty(
+    pred_bboxes: torch.Tensor, target_bboxes: torch.Tensor, eps: float = 1e-7
+) -> torch.Tensor:
+    """Return a bounded, orientation-symmetric shape penalty weighted by target elongation."""
+    pred_wh = (pred_bboxes[..., 2:4] - pred_bboxes[..., 0:2]).clamp_min(eps)
+    target_wh = (target_bboxes[..., 2:4] - target_bboxes[..., 0:2]).clamp_min(eps)
+    side_error = (pred_wh / target_wh).log().abs().mean(-1, keepdim=True)
+    pred_aspect = (pred_wh[..., 0:1] / pred_wh[..., 1:2]).log()
+    target_aspect = (target_wh[..., 0:1] / target_wh[..., 1:2]).log()
+    aspect_error = (pred_aspect - target_aspect).abs()
+    elongation_weight = target_aspect.abs().tanh()
+    return (0.5 * (side_error + aspect_error)).tanh() * elongation_weight
+
+
+def bbox_regression_iou_loss(
+    pred_bboxes: torch.Tensor,
+    target_bboxes: torch.Tensor,
+    shape_iou_scale: float | None = None,
+    elongation_penalty_weight: float = 0.0,
+) -> torch.Tensor:
+    """Calculate CIoU or Shape-IoU loss with an optional bounded elongation penalty."""
+    if shape_iou_scale is None:
+        iou = bbox_iou(pred_bboxes, target_bboxes, xywh=False, CIoU=True)
+    else:
+        iou = shape_iou(pred_bboxes, target_bboxes, xywh=False, scale=shape_iou_scale)
+    loss = 1.0 - iou
+    if elongation_penalty_weight:
+        loss = loss + elongation_penalty_weight * bounded_elongation_penalty(pred_bboxes, target_bboxes)
+    return loss
+
+
 class BboxLoss(nn.Module):
     """Criterion class for computing training losses for bounding boxes."""
 
-    def __init__(self, reg_max: int = 16, shape_iou_scale: float | None = None):
+    def __init__(
+        self,
+        reg_max: int = 16,
+        shape_iou_scale: float | None = None,
+        elongation_penalty_weight: float = 0.0,
+    ):
         """Initialize the BboxLoss module with regularization maximum and DFL settings."""
         super().__init__()
         if shape_iou_scale is not None:
             shape_iou_scale = float(shape_iou_scale)
         if shape_iou_scale is not None and (not math.isfinite(shape_iou_scale) or shape_iou_scale < 0):
             raise ValueError("shape_iou_scale must be finite and non-negative")
+        elongation_penalty_weight = float(elongation_penalty_weight)
+        if not math.isfinite(elongation_penalty_weight) or not 0.0 <= elongation_penalty_weight <= 1.0:
+            raise ValueError("elongation_penalty_weight must be finite and in [0, 1]")
+        if shape_iou_scale is not None and elongation_penalty_weight:
+            raise ValueError("Shape-IoU and the bounded elongation penalty are separate candidates")
         self.shape_iou_scale = shape_iou_scale
+        self.elongation_penalty_weight = elongation_penalty_weight
         self.dfl_loss = DFLoss(reg_max) if reg_max > 1 else None
 
     def forward(
@@ -134,13 +176,13 @@ class BboxLoss(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute IoU and DFL losses for bounding boxes."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        if self.shape_iou_scale is None:
-            iou = bbox_iou(pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, CIoU=True)
-        else:
-            iou = shape_iou(
-                pred_bboxes[fg_mask], target_bboxes[fg_mask], xywh=False, scale=self.shape_iou_scale
-            )
-        loss_iou = ((1.0 - iou) * weight).sum() / target_scores_sum
+        loss_iou = bbox_regression_iou_loss(
+            pred_bboxes[fg_mask],
+            target_bboxes[fg_mask],
+            shape_iou_scale=self.shape_iou_scale,
+            elongation_penalty_weight=self.elongation_penalty_weight,
+        )
+        loss_iou = (loss_iou * weight).sum() / target_scores_sum
 
         # DFL loss
         if self.dfl_loss:
@@ -368,7 +410,11 @@ class v8DetectionLoss:
             stride=self.stride.tolist(),
             topk2=tal_topk2,
         )
-        self.bbox_loss = BboxLoss(m.reg_max, shape_iou_scale=model.yaml.get("shape_iou_scale")).to(device)
+        self.bbox_loss = BboxLoss(
+            m.reg_max,
+            shape_iou_scale=model.yaml.get("shape_iou_scale"),
+            elongation_penalty_weight=model.yaml.get("elongation_penalty_weight", 0.0),
+        ).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
 
     def preprocess(self, targets: torch.Tensor, batch_size: int, scale_tensor: torch.Tensor) -> torch.Tensor:
