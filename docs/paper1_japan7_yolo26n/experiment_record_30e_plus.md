@@ -153,7 +153,24 @@ Run `signal_Paper1_ShapeIoU_s1_japan7_e30_img640_b32_pretrained_amp_seed42_20260
 | B0 AP50/AP50-95 | 0.397/0.193 | 0.324/0.130 | 0.657/0.348 | 0.434/0.189 | 0.760/0.537 | 0.697/0.439 | 0.750/0.397 |
 | A1 AP50/AP50-95 | 0.405/0.193 | 0.308/0.124 | 0.660/0.350 | 0.440/0.189 | 0.756/0.528 | 0.698/0.439 | 0.741/0.404 |
 
-A1 raises precision but reduces recall, overall mAP50-95, and the target D10 AP50/AP50-95. It is reproducible evidence that direct Shape-IoU replacement does not solve the measured D10 failure. Keep its YAML, code path, and run artifacts as a method-selection comparison, but do not include it in the final composite or promote it to 100e. A2 retains baseline CIoU and adds only a bounded log-aspect term. Its corrected adversarial audit proves full loss and every parameter gradient are bitwise baseline-equivalent at weight zero; A2 remains pre-smoke and has no experimental result yet.
+A1 raises precision but reduces recall, overall mAP50-95, and the target D10 AP50/AP50-95. It is reproducible evidence that direct Shape-IoU replacement does not solve the measured D10 failure. Keep its YAML, code path, and run artifacts as a method-selection comparison, but do not include it in the final composite or promote it to 100e. A2 was therefore tested next as a bounded additive log-aspect term while retaining baseline CIoU.
+
+### 2026-07-13 A2 Bounded Log-Aspect Loss
+
+Run `signal_Paper1_A2_BoundedShapeLoss_japan7_e30_img640_b32_pretrained_amp_seed42_20260713_153445` used commit `c8546a7`, the trusted `yolo26n.pt`, full `708/708` transfer, AMP, the cleaned Japan7 dataset, 30 epochs, image size 640, batch 32, and seed 42. The best checkpoint occurred at epoch 29; its epoch-row metrics were `0.57391` mAP50 and `0.31900` mAP50-95. Repeat validation of `best.pt` produced the rounded values below.
+
+| model | Params | FLOPs | P | R | mAP50 | mAP50-95 | decision |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| current canonical B0 | 2.376M | 5.2G | 0.587 | 0.561 | 0.574 | 0.319 | control |
+| A2 bounded log-aspect | 2.376M | 5.2G | 0.575 | 0.557 | 0.574 | 0.319 | reject; no 100e/composite |
+| delta (A2 - B0) | 0 | 0 | -0.012 | -0.004 | 0.000 | 0.000 | fails targeted-class gate |
+
+| model | D00 | D10 | D20 | D40 | D43 | D44 | D50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| B0 AP50/AP50-95 | 0.397/0.193 | 0.324/0.130 | 0.657/0.348 | 0.434/0.189 | 0.760/0.537 | 0.697/0.439 | 0.750/0.397 |
+| A2 AP50/AP50-95 | 0.405/0.192 | 0.305/0.121 | 0.652/0.343 | 0.440/0.191 | 0.763/0.541 | 0.703/0.445 | 0.751/0.401 |
+
+A2 was active rather than numerically inert: its first-batch weighted penalty was `3.1%-3.5%` of CIoU and its gradient norm was `10.4%-11.4%` of the CIoU gradient. Nevertheless, it reduced D10 AP50 by `0.019` and D10 AP50-95 by `0.009`. Matched 30e assignment diagnostics also showed no mechanism gain: B0 to A2 D10 one2many median candidate CIoU changed `0.8169 -> 0.8158`, median class score `0.1779 -> 0.1755`, and both retained effectively ten positives per GT. Reject A2 from 100e, weight sweeps, and the final composite. The next authorized design task is a class-agnostic B2 mechanism for high-quality matched positives with low classification confidence; it requires audit and smoke before any signal run.
 
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 

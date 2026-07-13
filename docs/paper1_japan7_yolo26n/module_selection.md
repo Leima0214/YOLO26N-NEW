@@ -2,7 +2,13 @@
 
 This branch records the module screening rules for YOLO26-probe. The current goal is an auditable Paper 1/Paper 2 candidate queue, not immediate module stacking.
 
-Do not modify Ultralytics core model code on this branch. Do not train. Do not restore old stashes. Do not fix `CARAFE`, `FDConv`, or `ContextAggregation` here; use a separate `fix/mmcv-compat-module-build` branch for that.
+Model-structure scanning is frozen on this branch. Localization/classification research changes must be minimal, configurable, baseline-equivalent when disabled, and adversarially audited before training. Do not restore old stashes or reopen `CARAFE`, `FDConv`, or `ContextAggregation` here.
+
+## 2026-07-13 Current Paper 1 Decision
+
+A1 Shape-IoU finished at `0.573/0.318` and A2 bounded log-aspect at `0.574/0.319`, versus the matched B0 control at `0.574/0.319`. A2 also reduced D10 from `0.324/0.130` to `0.305/0.121` AP50/AP50-95. Both localization-loss candidates are rejected from 100e and composites.
+
+Per-GT diagnostics show complete D10 positive assignment and nearly identical B0/A2 candidate CIoU, so do not change the assigner and do not sweep A2 weights. The next candidate is B2: a bounded, class-agnostic weighting mechanism for high-quality matched positives whose classification confidence remains low. B2 requires a disabled-path baseline equivalence audit and 1e smoke before any 30e signal.
 
 ## 2026-07-10 Protocol Correction
 
