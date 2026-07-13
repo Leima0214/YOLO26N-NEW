@@ -1,0 +1,153 @@
+{
+  "b2_yaml_sha256": "040d0ff873f18fddac14e42d68060985c9d377edcb012692e9fd9c116dc3cc71",
+  "checkpoint_sha256": "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef",
+  "checks": [
+    "trusted yolo26n checkpoint exists",
+    "trusted yolo26n checkpoint SHA256 matches",
+    "loss.py: no eval or exec calls",
+    "train_module_pilot.py: no eval or exec calls",
+    "audit_paper1_b2_hard_positive.py: no eval or exec calls",
+    "B2 YAML pins hard-positive weight 0.25",
+    "B2 YAML architecture and all baseline settings are unchanged",
+    "invalid hard-positive strength rejected: True",
+    "invalid hard-positive strength rejected: -0.1",
+    "invalid hard-positive strength rejected: 1.1",
+    "invalid hard-positive strength rejected: nan",
+    "invalid hard-positive strength rejected: inf",
+    "cpu: adaptive weights are detached",
+    "cpu: negative classes unchanged",
+    "cpu: weights bounded to [1, 1.25]",
+    "cpu: lower-confidence match receives more weight",
+    "cpu: poor localization suppresses the boost",
+    "cpu: factors are finite",
+    "cpu: weighted BCE gradients are finite",
+    "cpu: empty foreground is baseline BCE",
+    "cpu: empty foreground diagnostics are empty",
+    "cuda: adaptive weights are detached",
+    "cuda: negative classes unchanged",
+    "cuda: weights bounded to [1, 1.25]",
+    "cuda: lower-confidence match receives more weight",
+    "cuda: poor localization suppresses the boost",
+    "cuda: factors are finite",
+    "cuda: weighted BCE gradients are finite",
+    "cuda: empty foreground is baseline BCE",
+    "cuda: empty foreground diagnostics are empty",
+    "weight0 config reaches both E2E branches",
+    "weight0 CPU single: one2many exact",
+    "weight0 CPU single: one2one exact",
+    "weight0 CPU single: total exact",
+    "weight0 CPU single: every parameter gradient exact",
+    "weight0 CPU empty: one2many exact",
+    "weight0 CPU empty: one2one exact",
+    "weight0 CPU empty: total exact",
+    "weight0 CPU empty: every parameter gradient exact",
+    "weight0 CPU mixed: one2many exact",
+    "weight0 CPU mixed: one2one exact",
+    "weight0 CPU mixed: total exact",
+    "weight0 CPU mixed: every parameter gradient exact",
+    "weight0 CUDA AMP 640 batch2 mixed: one2many exact",
+    "weight0 CUDA AMP 640 batch2 mixed: one2one exact",
+    "weight0 CUDA AMP 640 batch2 mixed: total exact",
+    "weight0 CUDA AMP 640 batch2 mixed: every parameter gradient exact",
+    "baseline remains unweighted BCE in both E2E branches",
+    "B2 state names match baseline",
+    "B2 state shapes match baseline",
+    "B2 checkpoint has 708 matching items",
+    "B2 transferred tensors are bitwise equal",
+    "B2 weight reaches both E2E branches",
+    "B2 mixed-target loss is finite",
+    "B2 mixed-target gradients are finite",
+    "B2 one2many diagnostics captured",
+    "B2 one2many diagnostics contain positives",
+    "B2 one2many boost is active and bounded",
+    "B2 one2many diagnostics are finite",
+    "B2 one2one diagnostics captured",
+    "B2 one2one diagnostics contain positives",
+    "B2 one2one boost is active and bounded",
+    "B2 one2one diagnostics are finite",
+    "B2 empty-target loss is finite",
+    "B2 empty-target gradients are finite"
+  ],
+  "checks_passed": 65,
+  "cuda": "12.4",
+  "cuda_amp_verified": true,
+  "cuda_device": "NVIDIA GeForce RTX 4090",
+  "ddp_verified": false,
+  "details": {
+    "b2_one2many_assigned_positive_probe": {
+      "added_bce": 1.3423553705215454,
+      "added_grad_norm": 0.03338835388422012,
+      "added_to_base_ratio": 0.08630610257387161,
+      "base_bce": 15.553422927856445,
+      "base_grad_norm": 0.47241997718811035,
+      "boost_max": 0.19374559819698334,
+      "boost_mean": 0.09406619518995285,
+      "correct_confidence_mean": 4.194639404886402e-05,
+      "grad_norm_ratio": 0.07067514955997467,
+      "positive_count": 39,
+      "quality_mean": 0.37628400325775146
+    },
+    "b2_one2one_assigned_positive_probe": {
+      "added_bce": 1.9804863929748535,
+      "added_grad_norm": 0.08684053272008896,
+      "added_to_base_ratio": 0.12121295928955078,
+      "base_bce": 16.338899612426758,
+      "base_grad_norm": 0.6936584115028381,
+      "boost_max": 0.19570598006248474,
+      "boost_mean": 0.12275685369968414,
+      "correct_confidence_mean": 6.696969649055973e-05,
+      "grad_norm_ratio": 0.1251920759677887,
+      "positive_count": 4,
+      "quality_mean": 0.49105748534202576
+    },
+    "cpu_synthetic_probe": {
+      "boost": [
+        0.19999995827674866,
+        0.049999985843896866,
+        0.021362556144595146
+      ],
+      "confidence": [
+        0.20000000298023224,
+        0.800000011920929,
+        0.20000000298023224
+      ],
+      "positive_weights": [
+        1.1999999284744263,
+        1.0499999523162842,
+        1.021362543106079
+      ],
+      "quality": [
+        0.9999997615814209,
+        0.9999997615814209,
+        0.10681277513504028
+      ]
+    },
+    "cuda_synthetic_probe": {
+      "boost": [
+        0.19999995827674866,
+        0.049999985843896866,
+        0.021362556144595146
+      ],
+      "confidence": [
+        0.20000000298023224,
+        0.800000011920929,
+        0.20000000298023224
+      ],
+      "positive_weights": [
+        1.1999999284744263,
+        1.0499999523162842,
+        1.021362543106079
+      ],
+      "quality": [
+        0.9999997615814209,
+        0.9999997615814209,
+        0.10681277513504028
+      ]
+    }
+  },
+  "error": "",
+  "git_commit": "cffaacbe279af66579d3c0bf8345c1baa90bc61f",
+  "loss_py_sha256": "b4ca2a18f4ba2eb6597462a099c4e49b89bb38572a2336b46401cfe480d08200",
+  "status": "PASS",
+  "torch": "2.5.1+cu124"
+}

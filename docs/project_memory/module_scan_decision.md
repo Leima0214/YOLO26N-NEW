@@ -240,3 +240,11 @@ A2 then completed its matched 30e signal at `0.574/0.319`, exactly tying B0 over
 - An efficiency-role module should target at least `10%` measured FPS improvement or a clear Params/FLOPs reduction with no more than `-0.003 mAP50-95` in the final composite.
 - Report `P`, `R`, `mAP50`, `mAP50-95`, D00/D10 AP, Params, FLOPs, and FPS for every ablation row.
 - The old Baidu Netdisk source tree contains 105 YOLO26 YAMLs but is not a Git repository and currently fails import on an unrelated `timm.models.layers.weight_init` incompatibility. Use it only as a read-only module source; port selected modules into the clean branch and build-check them before training.
+
+### 2026-07-13 D10 Annotation Audit And B2 Authorization
+
+Seed-42 sampling preserved 100 train and 100 validation D10 examples. The qualitative first pass found no obvious train/validation class-definition mismatch, but repeatedly observed low contrast, road markings, shadows, blur, background texture, and inconsistent split/merge scale. This supports a bounded confidence mechanism and argues against class-ID-specific or unconditional positive amplification. Exact sample manifests are tracked under `experiments/dataset_diagnostics/japan7/d10_annotation_audit_seed42_20260713`; images remain excluded from Git.
+
+B2 is `YOLO26n-Paper1-B2-QualityHardPositive`: model structure stays byte-for-byte equivalent at the YAML architecture level, while assigned target-class BCE receives `1 + 0.25 * detached_CIoU * (1 - detached_correct_class_confidence)`. The shared loss path covers both E2E branches. At weight zero, full losses and every parameter gradient are exactly baseline-equivalent.
+
+Remote RTX 4090 adversarial audits passed `65/65` in both normal Python and `python -O`, including trusted checkpoint SHA256, bitwise `708/708` transfer, CUDA AMP, mixed and empty targets, bounded weights, and finite gradients. The observed added/base gradient ratios were `0.0707` one-to-many and `0.1252` one-to-one. This authorizes only one 1e smoke. No B2 30e or 100e run is authorized until its smoke artifacts and real assigned-positive diagnostics are reviewed.

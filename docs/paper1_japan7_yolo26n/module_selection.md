@@ -189,3 +189,17 @@ Deferred Paper 2 candidates:
 - Do not mix Paper 1 Japan7 and Paper 2 Common4 in one main result table.
 - Do not commit `runs`, `datasets`, `.pt` weights, or large images.
 - Do not change model structure on the baseline branch.
+
+## 2026-07-13 B2 Quality-Aware Hard Positive Gate
+
+A1 and A2 are closed after matched 30 epoch results failed the targeted D10 gate. B1 assigner work is also unsupported: B0 gives every evaluated D10 GT at least one positive and approximately ten one-to-many positives per GT. The next single-mechanism candidate is B2, not another model module.
+
+B2 changes only positive-class BCE during training:
+
+`weight = 1 + lambda * clamp(CIoU, 0, 1) * (1 - correct_class_confidence)`
+
+The adaptive factors are detached, class-agnostic, and applied only to the assigned target class. Negative classes, TaskAlignedAssigner, box/DFL loss, model architecture, Params, FLOPs, and inference are unchanged. The candidate YAML pins `lambda=0.25`; `lambda=0` is exactly the baseline code path.
+
+The adversarial audit passed 65 checks in normal and optimized Python on the remote RTX 4090. It verified CUDA AMP, empty targets, finite gradients, unchanged state names/shapes, bitwise `708/708` checkpoint transfer, and exact weight-zero loss and parameter-gradient equivalence in both end-to-end branches. Measured added/base classification-gradient ratios were `7.07%` for one-to-many and `12.52%` for one-to-one, so the candidate is active but bounded.
+
+Current authorization is one 1 epoch smoke only. Do not start a 30 epoch signal until the smoke has `COMPLETED`, `results.csv`, `best.pt`, `args.yaml`, `708/708` transfer, AMP, finite losses, and `b2_hard_positive_diagnostics.json`. A later matched 30 epoch B2 run must reach at least `0.322` mAP50-95 with no D10 regression to qualify as an accuracy contribution. A recall-role result must improve Recall by at least `0.02`, lose no more than `0.003` mAP50-95, and improve D00 or D10 recall.
