@@ -4,6 +4,8 @@
 
 WPFormer is relevant to Paper 1, but it is not a plug-in object-detection model. The CVPR 2025 method uses PVTv2, FPN, mask queries, and a transformer decoder for pixel-level segmentation. Its strongest transferable idea is Wavelet-enhanced Cross-Attention (WCA): Haar low/high-frequency decomposition followed by local/global modulation of high-frequency details. This is directly motivated by weak, elongated defects and was evaluated on CrackSeg9k.
 
+The S4 adaptation completed its matched 30e test on 2026-07-13 and is rejected: `mAP50-95=0.296` versus B0 `0.319`, with D00 and D10 AP50-95 lower by `0.024` and `0.027`. It is retained as a reproducible negative result, not as a formal or combination candidate.
+
 Prototype-guided Cross-Attention (PCA) is not transferred. PCA updates a fixed set of segmentation queries through learned prototypes; YOLO26's convolutional Detect head has no equivalent mask-query state. Adding PCA would create a new detector rather than a defensible single module.
 
 Primary sources:
@@ -47,7 +49,7 @@ The local audit is recorded in `experiments/module_scan/paper1_s4_wpformer_wdr_a
 | CPU bfloat16 | PASS |
 | Local CUDA AMP | unavailable; remote smoke required |
 
-## Remote Commands
+## Historical Remote Commands
 
 First pull the commit containing this model, verify the dataset, and run the audit. Then run only the 1 epoch smoke:
 
@@ -83,6 +85,19 @@ Decision against the matched `80bdad9` B0 (`mAP50-95=0.319`):
 - at least `0.328` with a D00 or D10 gain: strong signal and eligible for a two-module experiment.
 
 Do not run a WPFormer-WDR three-module combination before this single-module result.
+
+## 30e Result And Closure
+
+| metric | B0 | S4 WDR | delta |
+| --- | ---: | ---: | ---: |
+| Precision | 0.587 | 0.542 | -0.045 |
+| Recall | 0.561 | 0.530 | -0.031 |
+| mAP50 | 0.574 | 0.531 | -0.043 |
+| mAP50-95 | 0.319 | 0.296 | -0.023 |
+| D00 AP50-95 | 0.193 | 0.169 | -0.024 |
+| D10 AP50-95 | 0.130 | 0.103 | -0.027 |
+
+The epoch-30 checkpoint was still improving, but B0 was also still improving at the same budget. WDR's learned output projection was nonzero (`mean_abs=0.003324`, `max_abs=0.024628`), confirming that the branch participated in training. The predefined `<0.319` rule therefore applies: S4 is closed, W1-W3 are frozen, and no pair, three-module, or formal 100e promotion is authorized. Keep the YAML and artifacts so the negative result remains auditable.
 
 ## Adversarial Review (2026-07-12)
 

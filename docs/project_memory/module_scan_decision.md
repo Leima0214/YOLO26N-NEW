@@ -200,11 +200,11 @@ Commit-matched B0 reproduced at `0.574/0.319` mAP50/mAP50-95. Corrected A05 reac
 
 WPFormer is a query-based pixel-level segmentation system, not a YOLO plug-in. Its WCA idea is relevant because it was designed for weak elongated defects and evaluated on CrackSeg9k. S4 therefore adapts only WCA's context-modulated Haar detail mechanism as `WaveletDetailRefinement` on the P3 Detect input. PCA is excluded because YOLO26 Detect has no mask-query state. S4 must be described as WPFormer-WCA-inspired WDR, not as full WPFormer.
 
-S4 passed exact pretrained baseline equivalence, 640x640 forward/backward, mixed-precision, fusion, and semantic-transfer audits. It remains an untrained candidate. Run one CUDA AMP smoke, then a matched 30e signal only; require at least `0.323` mAP50-95 without a material D00/D10 decline before any combination.
+S4 passed exact pretrained baseline equivalence, 640x640 forward/backward, mixed-precision, fusion, and semantic-transfer audits, then completed CUDA AMP smoke and a matched 30e signal at commit `92c18ef`. It reached `0.531/0.296` mAP50/mAP50-95 versus the `80bdad9` B0 at `0.574/0.319`; D00 and D10 AP50-95 fell by `0.024` and `0.027`. Its nonzero learned output projection rules out an inactive branch. S4 is therefore rejected at 30e, is not a formal candidate, and is not authorized for pair or three-module experiments. Do not promote it to 100e; a fresh 100e convergence diagnostic is permitted only after higher-value single-module screening is complete.
 
-### Conditional WDR Three-Module Queue
+### Frozen WDR Three-Module Hypotheses
 
-WDR is technically shape-compatible with the remaining S1/S2/S3 single-module ideas, but no combination is authorized yet. The three possible three-module candidates formed by WDR plus two of those modules are:
+WDR is technically shape-compatible with the remaining S1/S2/S3 ideas, but S4 failed its mandatory 30e gate. The following historical hypotheses are retained only to preserve the decision trail; none is authorized to run or to be materialized as a YAML:
 
 | priority | conditional three-module model | placement and roles | current risk |
 | ---: | --- | --- | --- |
@@ -212,7 +212,11 @@ WDR is technically shape-compatible with the remaining S1/S2/S3 single-module id
 | W2 | FDRConv + WDR + SEAttention | FDRConv at P2-to-P3 downsampling; WDR then SE at final P3 Detect | two detail/frequency mechanisms may overlap; FDRConv was nearly unused in A10 |
 | W3 | FDRConv + WDR + single-node FFAFusion | FDRConv shallow downsampling; FFA P3 fusion; WDR P3 Detect refinement | three frequency-oriented mechanisms, highest redundancy and lowest priority |
 
-These rows are hypotheses, not YAMLs. If S4 is below `0.319`, delete all three. A constituent must first reach at least `0.323` alone; the corresponding two-module pair must then retain a positive signal before adding the third module. Do not force a three-module paper model when the single and pair evidence is negative.
+S4 finished below `0.319`, so W1-W3 are frozen and removed from the experiment queue. Do not force a three-module paper model when the single and pair evidence is negative.
+
+### Next Single-Module Queue
+
+Before judging gains near `+0.003`, reproduce B0 for 30 epochs at the current commit and GPU environment. Then smoke-test the transfer-friendly single-module `yolo26-LaplacianConv.yaml`; it preserves the baseline Conv-BN parameter path and adds only a bounded, zero-initialized Laplacian residual. The 2026-07-13 local audit passed exact pretrained output equivalence, fused-output equivalence, nonzero finite first-step `alpha` gradient, `708/709` tensor transfer, `99.999961%` parameter-weighted transfer, and full neck/Detect transfer. It adds exactly one trainable scalar over the matched baseline architecture. If its matched 30e result is below the new B0, reject it without 100e. SEAttention-P3 is the fallback single-module candidate. Tier B, P2/P2Lite, SPDConv, FDConv/FDRConv, and three-module experiments remain outside the current queue.
 
 ### Decision Rules
 

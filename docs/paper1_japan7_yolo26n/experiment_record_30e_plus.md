@@ -116,6 +116,26 @@ All three runs below used commit `80bdad9270519967c1e9cfdcef6814b53e4820ae`, `yo
 
 The corrected B0 reproduces the historical 30e control within `+0.001 mAP50-95`, so commit `80bdad9` did not regress the baseline. Every class declined in both corrected composites. Learned residual strengths were also small: A05 Laplacian gain `-0.00915`, A05 EMA gamma `0.02426`, A10 FDRConv gain `-0.00133`, A10 FFA mean absolute scale `0.00494`, and A10 EMA gamma `0.00779`. A05/A10 are formally eliminated and existing EMA composites are paused. New work returns to single-module diagnosis.
 
+### 2026-07-13 S4 WPFormer-WCA-Inspired WDR
+
+Run `signal_Paper1_S4_WDR_P3_japan7_e30_img640_b32_pretrained_amp_seed42_20260713` used commit `92c18ef12dc5b97823e83ff3652f1e716c2b3728`, the trusted `yolo26n.pt` checkpoint (`SHA256 9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef`), AMP, Japan7, 30 epochs, image size 640, batch 32, and seed 42. Parameter-weighted transfer was `99.7561%`; backbone, neck, and Detect transfer were `100%`, `99.3040%`, and `100%`.
+
+| model | Params | FLOPs | P | R | mAP50 | mAP50-95 | decision |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| prior protocol-matched B0 (`80bdad9`) | 2.376M | 5.2G | 0.587 | 0.561 | 0.574 | 0.319 | reference control |
+| S4 WDR P3 | 2.382M | 5.3G | 0.542 | 0.530 | 0.531 | 0.296 | reject at 30e; no combination or 100e promotion |
+| delta (S4 - B0) | +0.006M | +0.1G | -0.045 | -0.031 | -0.043 | -0.023 | negative signal |
+
+| model | D00 | D10 | D20 | D40 | D43 | D44 | D50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| B0 AP50-95 | 0.193 | 0.130 | 0.348 | 0.189 | 0.537 | 0.439 | 0.397 |
+| S4 AP50-95 | 0.169 | 0.103 | 0.318 | 0.174 | 0.506 | 0.412 | 0.387 |
+| delta | -0.024 | -0.027 | -0.030 | -0.015 | -0.031 | -0.027 | -0.010 |
+
+The best checkpoint occurred at epoch 30, but the matched B0 was also still improving at epoch 30. The mAP50-95 gap narrowed from `-0.0352` at epoch 10 to `-0.0232` at epoch 30, which does not override the predefined rejection gate. The learned WDR output projection was nonzero (`mean_abs=0.003324`, `max_abs=0.024628`, `L2=0.285238`), so failure cannot be attributed to an inactive module. S4 is closed as a valid negative result; W1-W3 are not authorized, and S4 must not enter a pair or three-module model. A fresh 100e run is allowed only as a low-priority convergence diagnostic after higher-value single-module screening, never as automatic promotion evidence.
+
+The remote run contains `results.csv`, `args.yaml`, both weights, model/data snapshots, commit/branch/status, command, checkpoint/model hashes, transfer metadata, and environment snapshots. `best_validation_log.txt` preserves a repeat validation with complete per-class output. The original training stdout was not redirected to a file and cannot be reconstructed; `results.csv` is the authoritative epoch curve.
+
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 
 These are the two completed 100 epoch module runs discussed yesterday. Both trained successfully, but neither beat the historical YOLO26n baseline.
@@ -178,6 +198,7 @@ Numerical summaries and reproducibility artifacts are tracked separately. A row 
 | Historical scratch EMA/P2Lite/SPDConv, 30e | overall signal metrics | results/args/best weights and logs in the 2026-07-09 archives | historical artifacts retained |
 | Protocol-matched B0 and EMA 30e from 2026-07-10 | overall/results curves and key classes | results/args/commands/commits/pretrained metadata plus best weights in 2026-07-10 archives | complete for their historical protocol |
 | EMA-P5-remap and EMA-P3-factor8, 30e | overall and per-class metrics recorded in this ledger | no matching local `results.csv`, `args.yaml`, or `best.pt` found in inspected archives | artifact gap |
+| S4 WDR P3, 30e | overall, full per-class AP, 30-row curve, transfer and learned-projection statistics | self-contained remote run plus repeat best-checkpoint validation log; original training stdout was not captured | complete except original stdout log |
 | Pre-correction Tier A05, 30e | overall and per-class metrics recorded | no matching local run artifacts found | artifact gap |
 | Corrected commit-`80bdad9` B0/A05/A10, 30e | overall, full per-class metrics, learned-module diagnostics | each has results/args/best/command/commit/pretrained/environment files in `paper1_80bdad9_e30_results_20260711.tar.gz`; `last.pt` intentionally excluded | complete |
 
