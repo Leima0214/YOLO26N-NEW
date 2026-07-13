@@ -107,18 +107,51 @@ class DFLoss(nn.Module):
         ).mean(-1, keepdim=True)
 
 
+def _validate_bbox_pair(pred_bboxes: torch.Tensor, target_bboxes: torch.Tensor) -> None:
+    """Reject malformed box pairs before bounded-shape arithmetic can broadcast or hide invalid data."""
+    if pred_bboxes.shape != target_bboxes.shape:
+        raise ValueError(f"pred/target bbox shapes must match, got {pred_bboxes.shape} and {target_bboxes.shape}")
+    if pred_bboxes.ndim < 2 or pred_bboxes.shape[-1] != 4:
+        raise ValueError(f"bbox tensors must have shape (..., 4), got {pred_bboxes.shape}")
+    if not pred_bboxes.is_floating_point() or not target_bboxes.is_floating_point():
+        raise TypeError("bbox tensors must use floating-point dtypes")
+    if pred_bboxes.device != target_bboxes.device:
+        raise ValueError(f"pred/target bboxes must share a device, got {pred_bboxes.device} and {target_bboxes.device}")
+    if not torch.isfinite(pred_bboxes).all() or not torch.isfinite(target_bboxes).all():
+        raise ValueError("bbox tensors must contain only finite values")
+    pred_wh = pred_bboxes[..., 2:4] - pred_bboxes[..., 0:2]
+    target_wh = target_bboxes[..., 2:4] - target_bboxes[..., 0:2]
+    if not (pred_wh > 0).all():
+        raise ValueError("predicted bboxes must have strictly positive width and height")
+    if not (target_wh > 0).all():
+        raise ValueError("target bboxes must have strictly positive width and height")
+
+
+def bounded_elongation_components(
+    pred_bboxes: torch.Tensor, target_bboxes: torch.Tensor, eps: float = 1e-7
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Return log-aspect error, elongation gate, and bounded penalty in float32."""
+    _validate_bbox_pair(pred_bboxes, target_bboxes)
+    if not math.isfinite(eps) or eps <= 0:
+        raise ValueError("eps must be finite and positive")
+    min_wh = max(float(eps), torch.finfo(pred_bboxes.dtype).eps, torch.finfo(target_bboxes.dtype).eps)
+    pred_boxes, target_boxes = pred_bboxes.float(), target_bboxes.float()
+    pred_wh = (pred_boxes[..., 2:4] - pred_boxes[..., 0:2]).clamp_min(min_wh)
+    target_wh = (target_boxes[..., 2:4] - target_boxes[..., 0:2]).clamp_min(min_wh)
+    pred_log_wh, target_log_wh = pred_wh.log(), target_wh.log()
+    pred_log_aspect = pred_log_wh[..., 0:1] - pred_log_wh[..., 1:2]
+    target_log_aspect = target_log_wh[..., 0:1] - target_log_wh[..., 1:2]
+    aspect_error = (pred_log_aspect - target_log_aspect).abs()
+    elongation_gate = target_log_aspect.abs().tanh()
+    penalty = aspect_error.tanh() * elongation_gate
+    return aspect_error, elongation_gate, penalty
+
+
 def bounded_elongation_penalty(
     pred_bboxes: torch.Tensor, target_bboxes: torch.Tensor, eps: float = 1e-7
 ) -> torch.Tensor:
-    """Return a bounded, orientation-symmetric shape penalty weighted by target elongation."""
-    pred_wh = (pred_bboxes[..., 2:4] - pred_bboxes[..., 0:2]).clamp_min(eps)
-    target_wh = (target_bboxes[..., 2:4] - target_bboxes[..., 0:2]).clamp_min(eps)
-    side_error = (pred_wh / target_wh).log().abs().mean(-1, keepdim=True)
-    pred_aspect = (pred_wh[..., 0:1] / pred_wh[..., 1:2]).log()
-    target_aspect = (target_wh[..., 0:1] / target_wh[..., 1:2]).log()
-    aspect_error = (pred_aspect - target_aspect).abs()
-    elongation_weight = target_aspect.abs().tanh()
-    return (0.5 * (side_error + aspect_error)).tanh() * elongation_weight
+    """Return a bounded, orientation-symmetric log-aspect penalty in float32."""
+    return bounded_elongation_components(pred_bboxes, target_bboxes, eps)[-1]
 
 
 def bbox_regression_iou_loss(
@@ -149,6 +182,8 @@ class BboxLoss(nn.Module):
     ):
         """Initialize the BboxLoss module with regularization maximum and DFL settings."""
         super().__init__()
+        if isinstance(shape_iou_scale, bool) or isinstance(elongation_penalty_weight, bool):
+            raise TypeError("localization-loss weights must be numeric, not bool")
         if shape_iou_scale is not None:
             shape_iou_scale = float(shape_iou_scale)
         if shape_iou_scale is not None and (not math.isfinite(shape_iou_scale) or shape_iou_scale < 0):

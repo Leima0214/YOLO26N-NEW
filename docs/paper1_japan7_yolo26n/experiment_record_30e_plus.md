@@ -153,7 +153,7 @@ Run `signal_Paper1_ShapeIoU_s1_japan7_e30_img640_b32_pretrained_amp_seed42_20260
 | B0 AP50/AP50-95 | 0.397/0.193 | 0.324/0.130 | 0.657/0.348 | 0.434/0.189 | 0.760/0.537 | 0.697/0.439 | 0.750/0.397 |
 | A1 AP50/AP50-95 | 0.405/0.193 | 0.308/0.124 | 0.660/0.350 | 0.440/0.189 | 0.756/0.528 | 0.698/0.439 | 0.741/0.404 |
 
-A1 raises precision but reduces recall, overall mAP50-95, and the target D10 AP50/AP50-95. It is reproducible evidence that direct Shape-IoU replacement does not solve the measured D10 failure. Keep its YAML, code path, and run artifacts as a method-selection comparison, but do not include it in the final composite or promote it to 100e. A2 retains baseline CIoU and adds a configurable bounded elongation penalty; `lambda=0` is required to recover baseline loss and gradients exactly.
+A1 raises precision but reduces recall, overall mAP50-95, and the target D10 AP50/AP50-95. It is reproducible evidence that direct Shape-IoU replacement does not solve the measured D10 failure. Keep its YAML, code path, and run artifacts as a method-selection comparison, but do not include it in the final composite or promote it to 100e. A2 retains baseline CIoU and adds only a bounded log-aspect term. Its corrected adversarial audit proves full loss and every parameter gradient are bitwise baseline-equivalent at weight zero; A2 remains pre-smoke and has no experimental result yet.
 
 ## 4. 2026-07-10 Formal 100 Epoch Module Runs
 

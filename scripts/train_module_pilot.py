@@ -416,7 +416,7 @@ def read_results(results_csv: Path) -> dict[str, object]:
                 continue
         numeric_rows.append(parsed)
 
-    out["nan_detected"] = any(math.isnan(v) for row in numeric_rows for v in row.values())
+    out["nan_detected"] = any(not math.isfinite(v) for row in numeric_rows for v in row.values())
     last = numeric_rows[-1]
     map50 = last.get("metrics/mAP50(B)", last.get("metrics/mAP50"))
     map95 = last.get("metrics/mAP50-95(B)", last.get("metrics/mAP50-95"))
@@ -432,6 +432,14 @@ def read_results(results_csv: Path) -> dict[str, object]:
         last_loss = sum(last.get(k, 0.0) for k in loss_keys)
         out["loss_decreased"] = last_loss < first_loss
     return out
+
+
+def fail_on_nonfinite_loss(trainer) -> None:
+    """Abort the run when the current scalar or component loss is not finite."""
+    for name in ("loss", "loss_items"):
+        value = getattr(trainer, name, None)
+        if torch.is_tensor(value) and not torch.isfinite(value).all():
+            raise FloatingPointError(f"Non-finite trainer.{name} detected")
 
 
 def pilot_csv_text(rows: list[dict[str, object]]) -> str:
@@ -517,6 +525,20 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Abort before training unless transfer coverage equals ITEMS/TOTAL, e.g. 708/714.",
     )
+    parser.add_argument(
+        "--expect-loss",
+        choices=("ciou", "shape_iou", "ciou_bounded_elongation"),
+        help="Abort before training unless the model YAML selects this localization loss.",
+    )
+    parser.add_argument(
+        "--expect-elongation-weight",
+        type=float,
+        help="Abort before training unless elongation_penalty_weight equals this value.",
+    )
+    parser.add_argument(
+        "--expect-checkpoint-sha256",
+        help="Abort before training unless the pretrained checkpoint has this SHA256.",
+    )
     parser.add_argument("--no-amp", action="store_true")
     return parser.parse_args()
 
@@ -554,12 +576,51 @@ def main() -> None:
     validate_tier_b_protocol(yaml_path, pretrained_path, checkpoint_sha256, args.imgsz, args.batch)
     model_config = safe_load_yaml(yaml_path)
     safe_load_yaml(data_yaml)
+    shape_iou_scale = model_config.get("shape_iou_scale")
+    elongation_weight = model_config.get("elongation_penalty_weight", 0.0)
+    if isinstance(shape_iou_scale, bool) or isinstance(elongation_weight, bool):
+        raise SystemExit("Localization-loss weights must be numeric, not bool")
+    try:
+        shape_iou_scale = None if shape_iou_scale is None else float(shape_iou_scale)
+        elongation_weight = float(elongation_weight)
+    except (TypeError, ValueError) as error:
+        raise SystemExit("Localization-loss weights must be numeric") from error
+    if shape_iou_scale is not None and (not math.isfinite(shape_iou_scale) or shape_iou_scale < 0):
+        raise SystemExit("shape_iou_scale must be finite and non-negative")
+    if not math.isfinite(elongation_weight) or not 0.0 <= elongation_weight <= 1.0:
+        raise SystemExit("elongation_penalty_weight must be finite and in [0, 1]")
+    if shape_iou_scale is not None and elongation_weight:
+        raise SystemExit("Shape-IoU and bounded elongation cannot be enabled together")
+    localization_loss = (
+        "shape_iou" if shape_iou_scale is not None else "ciou_bounded_elongation" if elongation_weight else "ciou"
+    )
+    if args.expect_loss and args.expect_loss != localization_loss:
+        raise SystemExit(f"Expected localization loss {args.expect_loss}, got {localization_loss}")
+    if args.expect_elongation_weight is not None and args.expect_elongation_weight != elongation_weight:
+        raise SystemExit(
+            f"Expected elongation_penalty_weight={args.expect_elongation_weight}, got {elongation_weight}"
+        )
+    if args.expect_checkpoint_sha256 and args.expect_checkpoint_sha256.lower() != checkpoint_sha256.lower():
+        raise SystemExit(
+            f"Checkpoint SHA256 mismatch: expected {args.expect_checkpoint_sha256.lower()}, "
+            f"got {checkpoint_sha256 or 'scratch'}"
+        )
+    loss_display = {
+        "ciou": "CIoU",
+        "shape_iou": "Shape-IoU",
+        "ciou_bounded_elongation": "CIoU+BoundedElongation",
+    }[localization_loss]
+    print(f"localization_loss={loss_display}")
+    print(f"loss_signature={localization_loss}")
+    print(f"elongation_penalty_weight={elongation_weight}")
 
     base = args.name or f"module_{module_name(yaml_path)}_japan7_e{args.epochs}_img{args.imgsz}_b{args.batch}_seed42"
     run_name, run_dir = reserve_run(base)
     set_run_state(run_dir, "RUNNING", f"pid={os.getpid()}")
     command = shlex.join(sys.argv)
     save_repro_files(run_dir, yaml_path, data_yaml, command, pretrained_path, checkpoint_sha256)
+    atomic_write_text(run_dir / "localization_loss.txt", localization_loss + "\n")
+    atomic_write_text(run_dir / "elongation_penalty_weight.txt", f"{elongation_weight}\n")
 
     row = {field: "" for field in FIELDS}
     row.update(
@@ -618,6 +679,7 @@ def main() -> None:
                 if failed:
                     raise RuntimeError(f"Tier B semantic checkpoint coverage below required minimums: {failed}")
         row["params_if_available"], row["flops_if_available"] = model_stats(model, args.imgsz)
+        model.add_callback("on_train_batch_end", fail_on_nonfinite_loss)
         model.train(
             data=str(data_yaml),
             epochs=args.epochs,
@@ -634,6 +696,13 @@ def main() -> None:
             plots=False,
         )
         row["status"] = "COMPLETED"
+    except FloatingPointError as e:
+        row.update(
+            status="NUMERICAL_ERROR",
+            error_type=type(e).__name__,
+            error_message_short=short(e),
+            nan_detected=True,
+        )
     except RuntimeError as e:
         msg = short(e)
         row.update(error_type=type(e).__name__, error_message_short=msg, oom="out of memory" in msg.lower())
@@ -642,8 +711,14 @@ def main() -> None:
         row.update(status="ERROR", error_type=type(e).__name__, error_message_short=short(e))
 
     results_csv = run_dir / "results.csv"
+    callback_detected_nonfinite = row["status"] == "NUMERICAL_ERROR"
     checks = read_results(results_csv)
     row.update(checks)
+    if callback_detected_nonfinite or row["nan_detected"]:
+        row["status"] = "NUMERICAL_ERROR"
+        row["nan_detected"] = True
+        row["error_type"] = row["error_type"] or "FloatingPointError"
+        row["error_message_short"] = row["error_message_short"] or "Non-finite value detected in results.csv"
     row.update(
         results_csv_exists=results_csv.exists(),
         best_pt_exists=(run_dir / "weights" / "best.pt").exists(),
