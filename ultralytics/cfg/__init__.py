@@ -154,6 +154,7 @@ CFG_FLOAT_KEYS = frozenset(
         "box",
         "cls",
         "dfl",
+        "dis",
         "degrees",
         "shear",
         "time",

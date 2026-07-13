@@ -19,19 +19,19 @@ Promote YOLO26s as a teacher only when all conditions hold:
 - mAP50-95 at least `0.325`, giving at least `+0.006` over the 30e YOLO26n control;
 - D10 AP50 and AP50-95 no lower than B0 (`0.324/0.130`).
 
-If this gate fails, do not implement distillation. A teacher without measured headroom cannot improve the student reliably.
+If this gate fails, do not run K1 distillation. A teacher without measured headroom cannot improve the student reliably.
 
-### K1: Multi-Scale Pearson Feature Distillation
+### K1: YOLO26 Score-Weighted Feature Distillation
 
-Use the frozen Japan7 YOLO26s teacher to supervise YOLO26n P3/P4/P5 neck features. Channel adapters are training-only. Features are standardized before Pearson-correlation loss so teacher magnitude and wider channels do not dominate the student. Student inference architecture, Params, FLOPs, and FPS remain unchanged.
+Use the frozen Japan7 YOLO26s teacher to supervise YOLO26n P3/P4/P5 neck features. This repository ports the official Ultralytics YOLO26 implementation from upstream commit `7477e462` plus its channel-count fix `352a5849`. Training-only projectors align student channels to the teacher, and teacher confidence weights the feature error so dense background does not dominate. The stripped `best.pt` contains only the student; inference architecture, Params, FLOPs, and FPS remain unchanged.
 
 This is preferred over localization distribution distillation because YOLO26 uses `reg_max=1`; there is no multi-bin DFL distribution to transfer.
 
-K1 receives one smoke and one matched 30e signal. Promotion requires at least `0.322` mAP50-95 with no D10 regression. It is not promoted because a paper reported gains elsewhere.
+K1 receives one smoke and one matched 30e signal using the official default `dis=6.0`. Promotion requires at least `0.322` mAP50-95 with no D10 regression. Do not search distillation weights until the default has produced a positive matched-protocol signal.
 
-### K2: Valuable-Region Prediction Distillation
+### K2: Pearson Feature Distillation Fallback
 
-Only after K1 has a positive signal, add teacher prediction supervision on spatially aligned P3/P4/P5 outputs. The mask must use teacher confidence and GT-overlapping regions to avoid overwhelming the student with dense background. K2 remains training-only and independently switchable.
+The official K1 loss already uses teacher confidence to emphasize valuable regions. Do not stack another prediction loss on it. Only if K1 is stable but neutral should a separate normalized Pearson feature loss be tested as an alternative, not as an automatic combination.
 
 ### C1: Directional Strip Representation
 
@@ -39,11 +39,11 @@ Only after teacher-guided YOLO26n is stronger than B0, test one residual P3 stri
 
 ## Paper Structure If The Gates Pass
 
-The final three attributable components become:
+The final attributable components are selected only after matched signals. A possible route is:
 
-1. `K1`: normalized multi-scale feature distillation;
-2. `K2`: valuable-region prediction distillation;
-3. `C1`: lightweight directional strip representation.
+1. `K1`: score-weighted multi-scale feature distillation;
+2. `C1`: lightweight directional strip representation;
+3. one later independently validated mechanism, rather than a precommitted third module.
 
 The YOLO26s teacher is used only during training. The final detector remains YOLO26n-based, with only C1 affecting inference cost.
 
@@ -53,6 +53,8 @@ The final 100e model must exceed the historical YOLO26n mAP50-95 of `0.341`; tar
 
 ## Primary Evidence
 
+- Ultralytics Knowledge Distillation guide: https://docs.ultralytics.com/guides/knowledge-distillation/
+- Ultralytics upstream implementation: https://github.com/ultralytics/ultralytics/commit/7477e4624a222db4df6c33b2ae1d57183bcf7b09
 - Localization Distillation for Dense Object Detection, CVPR 2022: https://openaccess.thecvf.com/content/CVPR2022/html/Zheng_Localization_Distillation_for_Dense_Object_Detection_CVPR_2022_paper.html
 - Focal and Global Knowledge Distillation for Detectors, CVPR 2022: https://openaccess.thecvf.com/content/CVPR2022/html/Yang_Focal_and_Global_Knowledge_Distillation_for_Detectors_CVPR_2022_paper.html
 - PKD: General Distillation Framework for Object Detectors via Pearson Correlation Coefficient, NeurIPS 2022: https://proceedings.neurips.cc/paper_files/paper/2022/hash/631ad9ae3174bf4d6c0f6fdca77335a4-Abstract-Conference.html

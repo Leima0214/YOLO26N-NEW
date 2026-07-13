@@ -45,6 +45,9 @@ FIELDS = [
     "timestamp",
     "yaml_path",
     "pretrained",
+    "distill_model",
+    "distill_model_sha256",
+    "distill_weight",
     "transferred_items",
     "transfer_total_items",
     "transfer_ratio",
@@ -458,12 +461,12 @@ def write_pilot_markdown(rows: list[dict[str, object]]) -> None:
         "",
         "One row per module run. Older rows may have blank transfer fields.",
         "",
-        "| yaml_path | pretrained | item transfer | parameter transfer | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
-        "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| yaml_path | pretrained | teacher | item transfer | parameter transfer | run_name | status | mAP50 | mAP50-95 | OOM | NaN | loss_decreased | next_step |",
+        "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
-            "| {yaml_path} | {pretrained} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
+            "| {yaml_path} | {pretrained} | {distill_model} | {transferred_items}/{transfer_total_items} ({transfer_ratio}) | "
             "{transferred_numel}/{transfer_total_numel} ({transfer_numel_ratio}) | "
             "{run_name} | {status} | {map50} | {map50_95} | {oom} | {nan_detected} | "
             "{loss_decreased} | {recommended_next_step} |".format(**row)
@@ -511,6 +514,17 @@ def parse_args() -> argparse.Namespace:
         "--pretrained",
         default="yolo26n.pt",
         help="Checkpoint transferred into matching YAML layers; use 'none' for scratch training.",
+    )
+    parser.add_argument(
+        "--distill-model",
+        default="",
+        help="Optional same-family teacher checkpoint used only during training.",
+    )
+    parser.add_argument(
+        "--distill-weight",
+        type=float,
+        default=6.0,
+        help="Score-weighted feature distillation gain (official default: 6.0).",
     )
     parser.add_argument(
         "--allow-low-transfer",
@@ -567,6 +581,8 @@ def main() -> None:
         raise SystemExit("--batch must be in [1, 1024]")
     if not 0 <= args.workers <= 128:
         raise SystemExit("--workers must be in [0, 128]")
+    if not math.isfinite(args.distill_weight) or not 0.0 <= args.distill_weight <= 100.0:
+        raise SystemExit("--distill-weight must be finite and in [0, 100]")
     yaml_path = resolve_within_root(args.model_yaml, "model YAML")
     data_yaml = resolve_within_root(args.data, "data YAML")
     if not yaml_path.exists():
@@ -579,7 +595,14 @@ def main() -> None:
     )
     if pretrained_path is not None and not pretrained_path.exists():
         raise SystemExit(f"Missing pretrained checkpoint: {args.pretrained}")
+    distill_arg = args.distill_model.strip()
+    distill_path = None if distill_arg.lower() in {"", "none", "null"} else resolve_within_root(
+        distill_arg, "distillation checkpoint"
+    )
+    if distill_path is not None and not distill_path.exists():
+        raise SystemExit(f"Missing distillation checkpoint: {args.distill_model}")
     checkpoint_sha256 = file_sha256(pretrained_path) if pretrained_path is not None else ""
+    distill_checkpoint_sha256 = file_sha256(distill_path) if distill_path is not None else ""
     validate_tier_b_protocol(yaml_path, pretrained_path, checkpoint_sha256, args.imgsz, args.batch)
     model_config = safe_load_yaml(yaml_path)
     safe_load_yaml(data_yaml)
@@ -639,6 +662,9 @@ def main() -> None:
     set_run_state(run_dir, "RUNNING", f"pid={os.getpid()}")
     command = shlex.join(sys.argv)
     save_repro_files(run_dir, yaml_path, data_yaml, command, pretrained_path, checkpoint_sha256)
+    atomic_write_text(run_dir / "distill_model.txt", f"{distill_path or 'none'}\n")
+    atomic_write_text(run_dir / "distill_model_sha256.txt", f"{distill_checkpoint_sha256 or 'none'}\n")
+    atomic_write_text(run_dir / "distill_weight.txt", f"{args.distill_weight}\n")
     atomic_write_text(run_dir / "localization_loss.txt", localization_loss + "\n")
     atomic_write_text(run_dir / "elongation_penalty_weight.txt", f"{elongation_weight}\n")
     atomic_write_text(run_dir / "classification_loss.txt", classification_loss + "\n")
@@ -649,6 +675,9 @@ def main() -> None:
         timestamp=datetime.now().isoformat(timespec="seconds"),
         yaml_path=str(yaml_path.relative_to(ROOT)).replace("\\", "/"),
         pretrained=str(pretrained_path.relative_to(ROOT)).replace("\\", "/") if pretrained_path else "scratch",
+        distill_model=str(distill_path.relative_to(ROOT)).replace("\\", "/") if distill_path else "none",
+        distill_model_sha256=distill_checkpoint_sha256,
+        distill_weight=args.distill_weight if distill_path else "",
         run_name=run_name,
         run_dir=str(run_dir.relative_to(ROOT)).replace("\\", "/"),
         status="ERROR",
@@ -780,6 +809,8 @@ def main() -> None:
             # save_repro_files() intentionally creates this unique directory before training.
             exist_ok=True,
             plots=False,
+            distill_model=str(distill_path) if distill_path else None,
+            dis=args.distill_weight,
         )
         row["status"] = "COMPLETED"
     except FloatingPointError as e:
