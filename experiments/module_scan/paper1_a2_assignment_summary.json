@@ -1,0 +1,473 @@
+{
+  "amp": true,
+  "batch": 16,
+  "branches": {
+    "one2many": {
+      "by_ar": {
+        "2to3": {
+          "best_candidate_iou_mean": 0.764568644625667,
+          "best_candidate_iou_median": 0.7934894859790802,
+          "best_class_score_mean": 0.005182461014815739,
+          "best_class_score_median": 0.0027141571044921875,
+          "gt_count": 896,
+          "outcome_rates": {
+            "both_adequate": 0.005580357142857143,
+            "both_low": 0.005580357142857143,
+            "iou_adequate_score_low": 0.9888392857142857,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.768973214285714,
+          "positive_count_median": 10.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "3to5": {
+          "best_candidate_iou_mean": 0.6859813371455301,
+          "best_candidate_iou_median": 0.7150137424468994,
+          "best_class_score_mean": 0.005551355037731314,
+          "best_class_score_median": 0.00234222412109375,
+          "gt_count": 906,
+          "outcome_rates": {
+            "both_adequate": 0.006622516556291391,
+            "both_low": 0.023178807947019868,
+            "iou_adequate_score_low": 0.9701986754966887,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.737306843267108,
+          "positive_count_median": 10.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "5to8": {
+          "best_candidate_iou_mean": 0.5498231506234483,
+          "best_candidate_iou_median": 0.5364381074905396,
+          "best_class_score_mean": 0.0029757843741887733,
+          "best_class_score_median": 0.0021076202392578125,
+          "gt_count": 395,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.10126582278481013,
+            "iou_adequate_score_low": 0.8987341772151899,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.90379746835443,
+          "positive_count_median": 10,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "ge8": {
+          "best_candidate_iou_mean": 0.44545647404054656,
+          "best_candidate_iou_median": 0.40814319252967834,
+          "best_class_score_mean": 0.002498503148990826,
+          "best_class_score_median": 0.0022335052490234375,
+          "gt_count": 137,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.27007299270072993,
+            "iou_adequate_score_low": 0.7299270072992701,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.97080291970803,
+          "positive_count_median": 10,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "lt2": {
+          "best_candidate_iou_mean": 0.7855173443672537,
+          "best_candidate_iou_median": 0.80734983086586,
+          "best_class_score_mean": 0.01273534647611774,
+          "best_class_score_median": 0.0032663345336914062,
+          "gt_count": 2666,
+          "outcome_rates": {
+            "both_adequate": 0.04876219054763691,
+            "both_low": 0.004126031507876969,
+            "iou_adequate_score_low": 0.9471117779444861,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.892348087021755,
+          "positive_count_median": 10.0,
+          "zero_positive_count": 2,
+          "zero_positive_rate": 0.0007501875468867217
+        }
+      },
+      "by_class": {
+        "D00": {
+          "best_candidate_iou_mean": 0.7290459705192858,
+          "best_candidate_iou_median": 0.7375242114067078,
+          "best_class_score_mean": 0.0024349095642052215,
+          "best_class_score_median": 0.0023059844970703125,
+          "gt_count": 811,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.004932182490752158,
+            "iou_adequate_score_low": 0.9950678175092479,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.872996300863132,
+          "positive_count_median": 10,
+          "zero_positive_count": 1,
+          "zero_positive_rate": 0.0012330456226880395
+        },
+        "D10": {
+          "best_candidate_iou_mean": 0.517116384554697,
+          "best_candidate_iou_median": 0.5098555684089661,
+          "best_class_score_mean": 0.0017750242007884471,
+          "best_class_score_median": 0.0019044876098632812,
+          "gt_count": 787,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.11435832274459974,
+            "iou_adequate_score_low": 0.8856416772554002,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.955527318932656,
+          "positive_count_median": 10,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D20": {
+          "best_candidate_iou_mean": 0.7790924649522603,
+          "best_candidate_iou_median": 0.7981747686862946,
+          "best_class_score_mean": 0.0037097436295915848,
+          "best_class_score_median": 0.0032033920288085938,
+          "gt_count": 1234,
+          "outcome_rates": {
+            "both_adequate": 0.0008103727714748784,
+            "both_low": 0.0,
+            "iou_adequate_score_low": 0.9991896272285251,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.95542949756888,
+          "positive_count_median": 10.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D40": {
+          "best_candidate_iou_mean": 0.7350319067169638,
+          "best_candidate_iou_median": 0.7607998251914978,
+          "best_class_score_mean": 0.0022213080350090477,
+          "best_class_score_median": 0.00206756591796875,
+          "gt_count": 425,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.021176470588235293,
+            "iou_adequate_score_low": 0.9788235294117648,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.76235294117647,
+          "positive_count_median": 10,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D43": {
+          "best_candidate_iou_mean": 0.7671180544556051,
+          "best_candidate_iou_median": 0.8030276000499725,
+          "best_class_score_mean": 0.010096128436102383,
+          "best_class_score_median": 0.00817108154296875,
+          "gt_count": 138,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.007246376811594203,
+            "iou_adequate_score_low": 0.9927536231884058,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.934782608695652,
+          "positive_count_median": 10.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D44": {
+          "best_candidate_iou_mean": 0.8338784646824801,
+          "best_candidate_iou_median": 0.8641923069953918,
+          "best_class_score_mean": 0.03348165335921632,
+          "best_class_score_median": 0.01242828369140625,
+          "gt_count": 877,
+          "outcome_rates": {
+            "both_adequate": 0.1516533637400228,
+            "both_low": 0.002280501710376283,
+            "iou_adequate_score_low": 0.8460661345496009,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.92018244013683,
+          "positive_count_median": 10,
+          "zero_positive_count": 1,
+          "zero_positive_rate": 0.0011402508551881414
+        },
+        "D50": {
+          "best_candidate_iou_mean": 0.7826377399429515,
+          "best_candidate_iou_median": 0.8213133811950684,
+          "best_class_score_mean": 0.007545281897534381,
+          "best_class_score_median": 0.0032415390014648438,
+          "gt_count": 728,
+          "outcome_rates": {
+            "both_adequate": 0.009615384615384616,
+            "both_low": 0.01098901098901099,
+            "iou_adequate_score_low": 0.9793956043956044,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 9.449175824175825,
+          "positive_count_median": 10.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        }
+      },
+      "overall": {
+        "best_candidate_iou_mean": 0.7357899037122726,
+        "best_candidate_iou_median": 0.7741771042346954,
+        "best_class_score_mean": 0.009028635239601136,
+        "best_class_score_median": 0.0028400421142578125,
+        "gt_count": 5000,
+        "outcome_rates": {
+          "both_adequate": 0.0282,
+          "both_low": 0.0228,
+          "iou_adequate_score_low": 0.949,
+          "iou_low_score_adequate": 0.0
+        },
+        "positive_count_mean": 9.8452,
+        "positive_count_median": 10.0,
+        "zero_positive_count": 2,
+        "zero_positive_rate": 0.0004
+      }
+    },
+    "one2one": {
+      "by_ar": {
+        "2to3": {
+          "best_candidate_iou_mean": 0.7605856156941238,
+          "best_candidate_iou_median": 0.7815105617046356,
+          "best_class_score_mean": 0.0024459523015788625,
+          "best_class_score_median": 0.002178192138671875,
+          "gt_count": 896,
+          "outcome_rates": {
+            "both_adequate": 0.0011160714285714285,
+            "both_low": 0.002232142857142857,
+            "iou_adequate_score_low": 0.9966517857142857,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "3to5": {
+          "best_candidate_iou_mean": 0.6800534299864675,
+          "best_candidate_iou_median": 0.7110263407230377,
+          "best_class_score_mean": 0.0019195225854583135,
+          "best_class_score_median": 0.0018277168273925781,
+          "gt_count": 906,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.01434878587196468,
+            "iou_adequate_score_low": 0.9856512141280354,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "5to8": {
+          "best_candidate_iou_mean": 0.5325703269318689,
+          "best_candidate_iou_median": 0.5004892945289612,
+          "best_class_score_mean": 0.002092077158674409,
+          "best_class_score_median": 0.001926422119140625,
+          "gt_count": 395,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.11392405063291139,
+            "iou_adequate_score_low": 0.8860759493670886,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "ge8": {
+          "best_candidate_iou_mean": 0.4332031146997083,
+          "best_candidate_iou_median": 0.38597092032432556,
+          "best_class_score_mean": 0.002059725949363987,
+          "best_class_score_median": 0.0020751953125,
+          "gt_count": 137,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.2846715328467153,
+            "iou_adequate_score_low": 0.7153284671532847,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "lt2": {
+          "best_candidate_iou_mean": 0.7819605238053777,
+          "best_candidate_iou_median": 0.8023744225502014,
+          "best_class_score_mean": 0.004552277692349799,
+          "best_class_score_median": 0.0026111602783203125,
+          "gt_count": 2666,
+          "outcome_rates": {
+            "both_adequate": 0.005626406601650412,
+            "both_low": 0.00037509377344336085,
+            "iou_adequate_score_low": 0.9939984996249063,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 0.9996249062265566,
+          "positive_count_median": 1.0,
+          "zero_positive_count": 1,
+          "zero_positive_rate": 0.00037509377344336085
+        }
+      },
+      "by_class": {
+        "D00": {
+          "best_candidate_iou_mean": 0.7214948375940176,
+          "best_candidate_iou_median": 0.7317177057266235,
+          "best_class_score_mean": 0.002313178652752783,
+          "best_class_score_median": 0.0022430419921875,
+          "gt_count": 811,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.0036991368680641184,
+            "iou_adequate_score_low": 0.9963008631319359,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 0.998766954377312,
+          "positive_count_median": 1,
+          "zero_positive_count": 1,
+          "zero_positive_rate": 0.0012330456226880395
+        },
+        "D10": {
+          "best_candidate_iou_mean": 0.5037996258581912,
+          "best_candidate_iou_median": 0.4891245365142822,
+          "best_class_score_mean": 0.0017028594107912638,
+          "best_class_score_median": 0.0018177032470703125,
+          "gt_count": 787,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.11435832274459974,
+            "iou_adequate_score_low": 0.8856416772554002,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D20": {
+          "best_candidate_iou_mean": 0.7729090406307332,
+          "best_candidate_iou_median": 0.7929548919200897,
+          "best_class_score_mean": 0.002561798744881752,
+          "best_class_score_median": 0.002452850341796875,
+          "gt_count": 1234,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.0,
+            "iou_adequate_score_low": 1.0,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D40": {
+          "best_candidate_iou_mean": 0.7317836953611935,
+          "best_candidate_iou_median": 0.7407087087631226,
+          "best_class_score_mean": 0.0021212300132302676,
+          "best_class_score_median": 0.0020503997802734375,
+          "gt_count": 425,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.0,
+            "iou_adequate_score_low": 1.0,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D43": {
+          "best_candidate_iou_mean": 0.7593685520299966,
+          "best_candidate_iou_median": 0.8060640394687653,
+          "best_class_score_mean": 0.005258256110592165,
+          "best_class_score_median": 0.004924774169921875,
+          "gt_count": 138,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.007246376811594203,
+            "iou_adequate_score_low": 0.9927536231884058,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D44": {
+          "best_candidate_iou_mean": 0.8314135547306818,
+          "best_candidate_iou_median": 0.8605988621711731,
+          "best_class_score_mean": 0.009218585124173485,
+          "best_class_score_median": 0.00518035888671875,
+          "gt_count": 877,
+          "outcome_rates": {
+            "both_adequate": 0.018244013683010263,
+            "both_low": 0.002280501710376283,
+            "iou_adequate_score_low": 0.9794754846066135,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        },
+        "D50": {
+          "best_candidate_iou_mean": 0.7852898191783454,
+          "best_candidate_iou_median": 0.8156313300132751,
+          "best_class_score_mean": 0.0014922071944226275,
+          "best_class_score_median": 0.0015850067138671875,
+          "gt_count": 728,
+          "outcome_rates": {
+            "both_adequate": 0.0,
+            "both_low": 0.005494505494505495,
+            "iou_adequate_score_low": 0.9945054945054945,
+            "iou_low_score_adequate": 0.0
+          },
+          "positive_count_mean": 1,
+          "positive_count_median": 1.0,
+          "zero_positive_count": 0,
+          "zero_positive_rate": 0.0
+        }
+      },
+      "overall": {
+        "best_candidate_iou_mean": 0.7304067963093519,
+        "best_candidate_iou_median": 0.7658890187740326,
+        "best_class_score_mean": 0.0034351171970367434,
+        "best_class_score_median": 0.00229644775390625,
+        "gt_count": 5000,
+        "outcome_rates": {
+          "both_adequate": 0.0032,
+          "both_low": 0.02,
+          "iou_adequate_score_low": 0.9768,
+          "iou_low_score_adequate": 0.0
+        },
+        "positive_count_mean": 0.9998,
+        "positive_count_median": 1.0,
+        "zero_positive_count": 1,
+        "zero_positive_rate": 0.0002
+      }
+    }
+  },
+  "command": "scripts/diagnose_paper1_gt_assignment.py --run-dir runs/module_scan/smoke_Paper1_A2_BoundedShapeLoss_japan7_e1_img640_b32_pretrained_amp_seed42_20260713_151849 --data configs/japan7_remote.yaml --split val --imgsz 640 --batch 16 --device 0 --workers 4",
+  "data_yaml": "configs/japan7_remote.yaml",
+  "git_commit": "545d5e24ae236c3f90f02ab45b6ca752c9f3a607",
+  "gt_count": 5000,
+  "images": 2119,
+  "imgsz": 640,
+  "iou_threshold": 0.3,
+  "overlap_metric": "CIoU clamped to [0, 1], matching TaskAlignedAssigner",
+  "run_dir": "runs/module_scan/smoke_Paper1_A2_BoundedShapeLoss_japan7_e1_img640_b32_pretrained_amp_seed42_20260713_151849",
+  "score_threshold": 0.05,
+  "split": "val",
+  "status": "PASS",
+  "weights_sha256": "8e811affeaca8bf4b4173f42405b6ffa431c54a6cb0bd9ef0ff29fe476e8692b"
+}
