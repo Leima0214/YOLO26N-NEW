@@ -23,17 +23,19 @@ Paper 1 uses `YOLO26n` as the direct baseline. The practical target for any modu
 
 This is the clean 30 epoch control used to anchor later module reruns under the same budget.
 
-| run_name | initialization | AMP | epochs | Params | FLOPs | mAP50 | mAP50-95 |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `control_Paper1_YOLO26n_japan7_e30_img640_b32_pretrained_amp_seed42_20260710` | `yolo26n.pt` | True | 30 | 2.376M | 5.2G | 0.572 | 0.318 |
+| run_name | commit | initialization | AMP | epochs | Params | FLOPs | mAP50 | mAP50-95 | role |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `control_Paper1_YOLO26n_japan7_e30_img640_b32_pretrained_amp_seed42_20260710` | historical | `yolo26n.pt` | True | 30 | 2.376M | 5.2G | 0.572 | 0.318 | historical control |
+| `control_Paper1_YOLO26n_commit6c34d74_japan7_e30_img640_b32_pretrained_amp_seed42_20260713_115118` | `6c34d74` | `yolo26n.pt` | True | 30 | 2.376M | 5.2G | 0.574 | 0.319 | current canonical control |
 
 Per-class anchor for the key categories:
 
 | model | D00 AP50 | D00 AP50-95 | D10 AP50 | D10 AP50-95 |
 | --- | ---: | ---: | ---: | ---: |
-| YOLO26n 30e control | 0.406 | 0.190 | 0.315 | 0.123 |
+| historical YOLO26n 30e control | 0.406 | 0.190 | 0.315 | 0.123 |
+| current `6c34d74` YOLO26n 30e control | 0.397 | 0.193 | 0.324 | 0.130 |
 
-This control is the correct comparison target for any 30 epoch pretrained module signal.
+The `6c34d74` run used full `708/708` tensor and `100%` regional/parameter transfer with AMP enabled. It exactly reproduces the corrected `80bdad9` control at `0.319 mAP50-95`, so it is the comparison target for subsequent 30 epoch pretrained signals on the current GPU environment.
 
 ## 3. Historical 30 Epoch Module Signals
 
@@ -122,7 +124,7 @@ Run `signal_Paper1_S4_WDR_P3_japan7_e30_img640_b32_pretrained_amp_seed42_2026071
 
 | model | Params | FLOPs | P | R | mAP50 | mAP50-95 | decision |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| prior protocol-matched B0 (`80bdad9`) | 2.376M | 5.2G | 0.587 | 0.561 | 0.574 | 0.319 | reference control |
+| current canonical B0 (`6c34d74`) | 2.376M | 5.2G | 0.587 | 0.561 | 0.574 | 0.319 | control |
 | S4 WDR P3 | 2.382M | 5.3G | 0.542 | 0.530 | 0.531 | 0.296 | reject at 30e; no combination or 100e promotion |
 | delta (S4 - B0) | +0.006M | +0.1G | -0.045 | -0.031 | -0.043 | -0.023 | negative signal |
 
