@@ -399,11 +399,11 @@ def main() -> None:
             branch: summarize(rows, branch, args.iou_threshold, args.score_threshold) for branch in BRANCHES
         },
     }
-    atomic_write(run_dir / "a2_assignment_per_gt.csv", csv_text(rows))
-    atomic_write(run_dir / "a2_assignment_summary.json", json.dumps(summary, indent=2, sort_keys=True) + "\n")
-    atomic_write(run_dir / "a2_assignment_summary.md", markdown(summary))
-    atomic_write(run_dir / "a2_assignment_command.txt", shlex.join(sys.argv) + "\n")
-    print(f"PASS: images={image_offset} gt={len(rows)} report={run_dir / 'a2_assignment_summary.md'}")
+    atomic_write(run_dir / "gt_assignment_per_gt.csv", csv_text(rows))
+    atomic_write(run_dir / "gt_assignment_summary.json", json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    atomic_write(run_dir / "gt_assignment_summary.md", markdown(summary))
+    atomic_write(run_dir / "gt_assignment_command.txt", shlex.join(sys.argv) + "\n")
+    print(f"PASS: images={image_offset} gt={len(rows)} report={run_dir / 'gt_assignment_summary.md'}")
 
 
 if __name__ == "__main__":
