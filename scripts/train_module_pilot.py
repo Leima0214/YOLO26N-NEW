@@ -7,6 +7,7 @@ import argparse
 import csv
 import hashlib
 import io
+import json
 import math
 import os
 import re
@@ -20,6 +21,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
+import torch
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -680,6 +682,38 @@ def main() -> None:
                     raise RuntimeError(f"Tier B semantic checkpoint coverage below required minimums: {failed}")
         row["params_if_available"], row["flops_if_available"] = model_stats(model, args.imgsz)
         model.add_callback("on_train_batch_end", fail_on_nonfinite_loss)
+        if localization_loss == "ciou_bounded_elongation":
+            diagnostics_saved = False
+
+            def enable_a2_diagnostics(trainer) -> None:
+                network = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
+                if getattr(network, "criterion", None) is None:
+                    network.criterion = network.init_criterion()
+                for branch in (network.criterion.one2many, network.criterion.one2one):
+                    branch.bbox_loss.collect_diagnostics_once = True
+
+            def save_a2_diagnostics(trainer) -> None:
+                nonlocal diagnostics_saved
+                if diagnostics_saved:
+                    return
+                network = trainer.model.module if hasattr(trainer.model, "module") else trainer.model
+                criterion = getattr(network, "criterion", None)
+                if criterion is None:
+                    return
+                diagnostics = {
+                    name: getattr(getattr(criterion, name).bbox_loss, "last_diagnostics", None)
+                    for name in ("one2many", "one2one")
+                }
+                if not all(diagnostics.values()):
+                    return
+                atomic_write_text(
+                    run_dir / "a2_penalty_diagnostics.json",
+                    json.dumps(diagnostics, indent=2, sort_keys=True) + "\n",
+                )
+                diagnostics_saved = True
+
+            model.add_callback("on_train_start", enable_a2_diagnostics)
+            model.add_callback("on_train_batch_end", save_a2_diagnostics)
         model.train(
             data=str(data_yaml),
             epochs=args.epochs,

@@ -3,6 +3,7 @@
 
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -355,7 +356,10 @@ def audit_a2_full_loss(baseline) -> None:
     candidate = bounded_yolo.model.cuda()
     candidate.args = get_cfg()
     candidate.train()
-    candidate.criterion = None
+    candidate.criterion = candidate.init_criterion()
+    losses = (candidate.criterion.one2many.bbox_loss, candidate.criterion.one2one.bbox_loss)
+    for bbox_loss in losses:
+        bbox_loss.collect_diagnostics_once = True
     mixed = synthetic_batch(640, "cuda", "mixed")
     with torch.autocast("cuda", dtype=torch.float16):
         loss, items = candidate.loss(mixed)
@@ -374,11 +378,32 @@ def audit_a2_full_loss(baseline) -> None:
         all(torch.isfinite(parameter.grad).all() for parameter in candidate.parameters() if parameter.grad is not None),
         "A2 empty-target backward gradients finite",
     )
-    losses = (candidate.criterion.one2many.bbox_loss, candidate.criterion.one2one.bbox_loss)
     require(
         all(loss.shape_iou_scale is None and loss.elongation_penalty_weight == 0.1 for loss in losses),
         "A2 one2many and one2one both use CIoU plus weight 0.1",
     )
+    required = {
+        "positive_count",
+        "base_ciou_mean",
+        "bounded_penalty_mean",
+        "weighted_penalty_to_ciou",
+        "base_ciou_grad_norm",
+        "penalty_grad_norm",
+        "grad_norm_ratio",
+        "penalty_mean_by_ar",
+    }
+    require(
+        all(loss.last_diagnostics and required <= loss.last_diagnostics.keys() for loss in losses),
+        "A2 diagnostics captured for both E2E branches",
+    )
+    for name, loss in zip(("one2many", "one2one"), losses):
+        diagnostics = loss.last_diagnostics
+        require(diagnostics["positive_count"] > 0, f"A2 {name} diagnostic has assigned positives")
+        require(
+            all(math.isfinite(value) for value in diagnostics.values() if isinstance(value, (int, float))),
+            f"A2 {name} diagnostic values are finite",
+        )
+        DETAILS[f"a2_{name}_assigned_positive_probe"] = diagnostics
 
 
 def audit_penalty_contribution() -> None:

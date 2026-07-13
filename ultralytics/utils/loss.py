@@ -195,7 +195,46 @@ class BboxLoss(nn.Module):
             raise ValueError("Shape-IoU and the bounded elongation penalty are separate candidates")
         self.shape_iou_scale = shape_iou_scale
         self.elongation_penalty_weight = elongation_penalty_weight
+        self.collect_diagnostics_once = False
+        self.last_diagnostics = None
         self.dfl_loss = DFLoss(reg_max) if reg_max > 1 else None
+
+    def _collect_diagnostics(
+        self,
+        pred_bboxes: torch.Tensor,
+        target_bboxes: torch.Tensor,
+        base_loss: torch.Tensor,
+        penalty: torch.Tensor,
+        weight: torch.Tensor,
+        target_scores_sum: torch.Tensor,
+    ) -> None:
+        """Capture one real positive-batch decomposition without changing the optimized loss."""
+        base_weighted = (base_loss * weight).sum() / target_scores_sum
+        penalty_weighted = (self.elongation_penalty_weight * penalty * weight).sum() / target_scores_sum
+        base_grad = torch.autograd.grad(base_weighted, pred_bboxes, retain_graph=True)[0]
+        penalty_grad = torch.autograd.grad(penalty_weighted, pred_bboxes, retain_graph=True)[0]
+        base_norm = base_grad.float().norm()
+        penalty_norm = penalty_grad.float().norm()
+        target_wh = target_bboxes.float()[..., 2:4] - target_bboxes.float()[..., 0:2]
+        aspect_ratio = torch.maximum(target_wh[..., 0] / target_wh[..., 1], target_wh[..., 1] / target_wh[..., 0])
+        penalty_by_ar = {}
+        bins = (("lt2", 0, 2), ("2to3", 2, 3), ("3to5", 3, 5), ("5to8", 5, 8), ("ge8", 8, float("inf")))
+        for label, lower, upper in bins:
+            mask = (aspect_ratio >= lower) & (aspect_ratio < upper)
+            penalty_by_ar[label] = float(penalty[mask].mean().item()) if mask.any() else None
+        self.last_diagnostics = {
+            "positive_count": int(pred_bboxes.shape[0]),
+            "base_ciou_mean": float(base_loss.mean().item()),
+            "base_ciou_weighted": float(base_weighted.item()),
+            "bounded_penalty_mean": float(penalty.mean().item()),
+            "weighted_penalty": float(penalty_weighted.item()),
+            "weighted_penalty_to_ciou": float((penalty_weighted / base_weighted.clamp_min(1e-12)).item()),
+            "base_ciou_grad_norm": float(base_norm.item()),
+            "penalty_grad_norm": float(penalty_norm.item()),
+            "grad_norm_ratio": float((penalty_norm / base_norm.clamp_min(1e-12)).item()),
+            "penalty_mean_by_ar": penalty_by_ar,
+        }
+        self.collect_diagnostics_once = False
 
     def forward(
         self,
@@ -211,12 +250,26 @@ class BboxLoss(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute IoU and DFL losses for bounding boxes."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        loss_iou = bbox_regression_iou_loss(
-            pred_bboxes[fg_mask],
-            target_bboxes[fg_mask],
+        positive_pred_bboxes = pred_bboxes[fg_mask]
+        positive_target_bboxes = target_bboxes[fg_mask]
+        base_loss = bbox_regression_iou_loss(
+            positive_pred_bboxes,
+            positive_target_bboxes,
             shape_iou_scale=self.shape_iou_scale,
-            elongation_penalty_weight=self.elongation_penalty_weight,
         )
+        loss_iou = base_loss
+        if self.elongation_penalty_weight:
+            penalty = bounded_elongation_penalty(positive_pred_bboxes, positive_target_bboxes)
+            loss_iou = loss_iou + self.elongation_penalty_weight * penalty
+            if self.collect_diagnostics_once:
+                self._collect_diagnostics(
+                    positive_pred_bboxes,
+                    positive_target_bboxes,
+                    base_loss,
+                    penalty,
+                    weight,
+                    target_scores_sum,
+                )
         loss_iou = (loss_iou * weight).sum() / target_scores_sum
 
         # DFL loss
