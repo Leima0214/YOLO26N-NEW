@@ -1,0 +1,15 @@
+# Paper 1 — Japan7 single-domain baseline (remote GPU)
+
+path: /yolo26-probe/derived/japan7
+train: images/train
+val: images/val
+
+nc: 7
+names:
+  0: D00
+  1: D10
+  2: D20
+  3: D40
+  4: D43
+  5: D44
+  6: D50
