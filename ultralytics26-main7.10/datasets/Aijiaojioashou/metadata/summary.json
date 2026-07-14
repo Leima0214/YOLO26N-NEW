@@ -1,0 +1,52 @@
+{
+  "dataset": "Aijiaojioashou",
+  "version": "coco80_three_active_classes_targeted_metrics",
+  "total_images": 300,
+  "total_boxes": 332,
+  "image_size": [
+    640,
+    640
+  ],
+  "active_classes": [
+    "car",
+    "dog",
+    "chair"
+  ],
+  "label_policy": "YOLO labels preserve COCO80 class ids 2,16,56 for yolo26n pretrained-head transfer.",
+  "split_images": {
+    "train2017": 180,
+    "val2017": 60,
+    "test2017": 60
+  },
+  "split_boxes": {
+    "train2017": 180,
+    "val2017": 64,
+    "test2017": 88
+  },
+  "class_box_distribution": {
+    "car": {
+      "total": 114,
+      "small": 10,
+      "medium": 14,
+      "large": 90
+    },
+    "dog": {
+      "total": 107,
+      "small": 10,
+      "medium": 18,
+      "large": 79
+    },
+    "chair": {
+      "total": 111,
+      "small": 11,
+      "medium": 19,
+      "large": 81
+    }
+  },
+  "complex_conditions": {
+    "occlusion_like": 2,
+    "low_light": 68,
+    "shadow_like": 36,
+    "harsh_light": 17
+  }
+}

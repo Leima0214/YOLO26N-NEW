@@ -1,0 +1,42 @@
+# Ultralytics YOLO26 + OverLoCK full-backbone replacement.
+# Paper: OverLoCK, CVPR 2025 Oral.
+# Code : https://github.com/LMMMEng/OverLoCK
+
+nc: 80
+end2end: True
+reg_max: 1
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # Full OverLoCK-style trunk replaces the original YOLO26 Conv/C3k2 backbone.
+  # Overview-first context and look-closely dynamic kernels are applied stage-wise.
+  - [-1, 1, OverLoCKBackboneYOLO, [tiny, [512, 512, 1024], 3]] # 0: [P3/8, P4/16, P5/32]
+  - [0, 1, VisionBackboneFeatureIndex, [0]] # 1-P3/8
+  - [0, 1, VisionBackboneFeatureIndex, [1]] # 2-P4/16
+  - [0, 1, VisionBackboneFeatureIndex, [2]] # 3-P5/32
+  - [3, 1, SPPF, [1024, 5, 3, True]] # 4
+  - [-1, 2, C2PSA, [1024]] # 5
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 2], 1, Concat, [1]]
+  - [-1, 2, C3k2, [512, True]] # 8
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 1], 1, Concat, [1]]
+  - [-1, 2, C3k2, [256, True]] # 11 (P3/8-small)
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 8], 1, Concat, [1]]
+  - [-1, 2, C3k2, [512, True]] # 14 (P4/16-medium)
+
+  - [-1, 1, Conv, [512, 3, 2]]
+  - [[-1, 5], 1, Concat, [1]]
+  - [-1, 1, C3k2, [1024, True, 0.5, True]] # 17 (P5/32-large)
+
+  - [[11, 14, 17], 1, Detect, [nc]]

@@ -1,0 +1,40 @@
+# Ultralytics YOLO26 + MicroViTv2 adapter backbone
+# Method 2: MicroViTv2 trunk is wrapped by 1x1/channel-refine adapters before the YOLO neck.
+
+nc: 80
+end2end: True
+reg_max: 1
+scales:
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # args: [variant, yolo_channels, in_chans, mlp_ratio, adapter_depth]
+  - [-1, 1, MicroViTv2AdapterYOLO, [tiny, [256, 512, 1024], 3, 2.0, 1]] # 0: adapted [P3, P4, P5]
+  - [0, 1, MicroFeatureIndex, [0]] # 1-P3/8
+  - [0, 1, MicroFeatureIndex, [1]] # 2-P4/16
+  - [0, 1, MicroFeatureIndex, [2]] # 3-P5/32
+  - [3, 1, SPPF, [1024, 5, 3, True]] # 4
+  - [-1, 2, C2PSA, [1024]] # 5
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 2], 1, Concat, [1]]
+  - [-1, 2, C3k2, [512, True]] # 8
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 1], 1, Concat, [1]]
+  - [-1, 2, C3k2, [256, True]] # 11
+
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 8], 1, Concat, [1]]
+  - [-1, 2, C3k2, [512, True]] # 14
+
+  - [-1, 1, Conv, [512, 3, 2]]
+  - [[-1, 5], 1, Concat, [1]]
+  - [-1, 1, C3k2, [1024, True, 0.5, True]] # 17
+
+  - [[11, 14, 17], 1, Detect, [nc]]

@@ -1,0 +1,12 @@
+{
+  "weights": "D:\\Users\\D\\Desktop\\ultralytics26-main5.26\\runs\\detect\\Aijiaojioashou_yolo26n_yaml_100e\\weights\\last.pt",
+  "epochs": 100,
+  "split": "val",
+  "results_dict": {
+    "metrics/precision(B)": 0.7774894786484006,
+    "metrics/recall(B)": 0.730048164821658,
+    "metrics/mAP50(B)": 0.7496017594001735,
+    "metrics/mAP50-95(B)": 0.6047542898479202,
+    "fitness": 0.6047542898479202
+  }
+}
