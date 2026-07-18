@@ -1,4 +1,4 @@
-# Paper 1 — Japan7 single-domain baseline (remote GPU)
+# Paper 1 - Japan7 single-domain dataset (remote GPU)
 
 path: /yolo26-probe/derived/japan7
 train: images/train

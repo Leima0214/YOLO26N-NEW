@@ -1,0 +1,4 @@
+{
+    "cmake.ignoreCMakeListsMissing": true,
+    "python.defaultInterpreterPath": "/opt/conda/bin/python"
+}

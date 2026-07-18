@@ -1,0 +1,12 @@
+# Base image already provides torch==2.5.1+cu124 and torchvision==0.20.1+cu124.
+ultralytics==8.4.2
+timm==0.6.13
+einops
+efficientnet-pytorch
+mmcv-lite==2.2.0
+mmengine==0.10.7
+pytorch-wavelets
+PyWavelets
+seaborn
+pandas
+ipython

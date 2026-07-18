@@ -8,7 +8,10 @@ import matplotlib.pyplot as plt
 from numpy.linalg import matrix_rank
 from torch.utils.checkpoint import checkpoint
 
-from mmcv.cnn import CONV_LAYERS
+try:
+    from mmcv.cnn import CONV_LAYERS
+except ImportError:  # MMCV 2.x
+    from mmengine.registry import MODELS as CONV_LAYERS
 from torch import Tensor
 import torch.nn.functional as F
 import math
