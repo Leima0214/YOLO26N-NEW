@@ -1,5 +1,10 @@
 # Paper 1 remote 10-epoch handoff (2026-07-18)
 
+> Historical handoff. The referenced 50-epoch task completed as scratch + explicit
+> MuSGD and is recorded as
+> `mobilemamba_scratch_explicit_musgd_japan7_50e_seed42`. Do not resume it as a
+> partial-pretrained task; use the repository `README.md` for the current protocol.
+
 ## Fixed protocol
 
 - GPU: NVIDIA GeForce RTX 4090
@@ -13,8 +18,8 @@
 - Training: 640 px, batch 32, MuSGD, seed 42, AMP, 8 workers
 
 Dataset validation found no missing labels, malformed lines, out-of-bounds boxes,
-duplicate label lines, corrupt images, or broken links. Empty labels (638 train,
-156 val) are valid background images after the three excluded classes are removed.
+duplicate label lines, or broken links. Empty labels (638 train, 156 val) are valid
+background images after the three excluded classes are removed.
 
 ## 10-epoch smoke result
 
@@ -46,13 +51,8 @@ cd /root/YOLO26N-NEW
 find -L /yolo26-probe/derived/japan7 -type l | head
 ```
 
-Run the requested 50 epochs in the VSCode terminal:
-
-```bash
-cd /root/YOLO26N-NEW
-EPOCHS=50 RUN_NAME=mobilemamba_backbone_japan7_50e \
-  /opt/conda/bin/python train.py
-```
+The requested scratch 50-epoch run is complete. Its immutable record is
+`reports/mobilemamba_scratch_explicit_musgd_japan7_50e_seed42.md`.
 
 Monitor from a second VSCode terminal:
 
@@ -61,16 +61,9 @@ watch -n 5 nvidia-smi
 tail -f /root/YOLO26N-NEW/runs/paper1/mobilemamba_backbone_japan7_50e/results.csv
 ```
 
-Resume only an interrupted 50-epoch run:
-
-```bash
-cd /root/YOLO26N-NEW
-/opt/conda/bin/python - <<'PY'
-from ultralytics import YOLO
-
-YOLO("runs/paper1/mobilemamba_backbone_japan7_50e/weights/last.pt").train(resume=True)
-PY
-```
+Resume only an interrupted run with the same initialization policy, model, data,
+optimizer, seed, and run identity. Cross-resuming the historical scratch checkpoint
+into the partial-pretrained protocol is forbidden.
 
 ## Next-task gates
 
