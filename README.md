@@ -1,53 +1,37 @@
-# YOLO26N-NEW Paper 1 protocol
+# YOLO26N-NEW Paper 1
 
-This checkout trains Japan7 models from `/yolo26-probe/derived/japan7` with class order
+Japan7 uses seven classes in this order:
 `D00, D10, D20, D40, D43, D44, D50`.
 
-## Experiment identity
+## Current candidate
 
-- Historical scratch result:
-  `mobilemamba_scratch_explicit_musgd_japan7_50e_seed42`.
-- Next partial-pretrained result:
-  `mobilemamba_partial_pretrained_auto_japan7_30e_seed42`.
-- The historical scratch artifacts remain in
-  `/root/YOLO26N-NEW/runs/paper1/mobilemamba_backbone_japan7_50e` so their original
-  `args.yaml` and checkpoint metadata are not rewritten.
+`yolo26n-Paper1-MobileMamba-P3.yaml` keeps the native YOLO26n 24-layer topology
+and adds one MobileMamba residual to the P3 backbone stage. Its residual scale is
+zero-initialized, so loading `yolo26n.pt` preserves B0 behavior exactly at step 0
+while allowing the new branch to learn.
 
-Pulling a commit or editing `train.py` does not change an already running Python
-process. Initialization, optimizer groups, and run name are fixed when that process
-starts.
+The rejected full-backbone replacement remains available only for historical
+reproduction. Its 55.56% parameter coverage and random backbone produced:
 
-Never resume a scratch checkpoint as a partial-pretrained experiment. Resume is valid
-only when `last.pt`, `args.yaml`, initialization policy, model YAML, dataset, optimizer,
-seed, and run identity all belong to the same interrupted run.
+- scratch MuSGD 50e: mAP50-95 `0.295`
+- partial-pretrained auto 30e: mAP50-95 `0.191`
+- scratch-best stage-2 run: stopped after epoch 25, best mAP50-95 `0.287`
 
-## Audits before training
+Do not resume any of those checkpoints into the current candidate.
+
+## Remote checks and run
 
 ```bash
 /opt/conda/bin/python scripts/check_dataset.py --data configs/japan7_remote.yaml
+CUDA_VISIBLE_DEVICES=-1 /opt/conda/bin/python scripts/audit_mobilemamba_identity.py
 CUDA_VISIBLE_DEVICES=-1 /opt/conda/bin/python scripts/audit_optimizer_groups.py
+
+/opt/conda/bin/python train.py
 ```
 
-The optimizer audit must report `model.23` for YOLO26n and `model.18` for
-MobileMamba. A partial-pretrained MobileMamba run must also create
-`pretrained_transfer.txt` with the checkpoint SHA256 and global/backbone/neck/Detect
-coverage. The audited Japan7 target is 420/674 state items, 55.56% parameters,
-27.70% backbone, 100% neck, and 62.93% of the actual `model.18` Detect head.
-This is not initialization-equivalent to a fully pretrained B0 because the
-MobileMamba-specific backbone remains random; report that limitation explicitly.
+The identity audit must report at least 96% parameter coverage, exact step-0
+equivalence, and a nonzero residual-gate gradient.
 
-`yolo26n.pt` must be the real checkpoint, not a small Git LFS pointer file. The
-training entry fails before model construction when it detects a pointer.
-
-## Matched 30-epoch run
-
-```bash
-EPOCHS=1 RUN_NAME=mobilemamba_partial_pretrained_auto_japan7_1e_seed42 \
-  /opt/conda/bin/python train.py
-
-EPOCHS=30 RUN_NAME=mobilemamba_partial_pretrained_auto_japan7_30e_seed42 \
-  /opt/conda/bin/python train.py
-```
-
-Run the one-epoch smoke first. Do not overwrite or reuse the historical scratch
-directory.
+To switch experiments, edit only `MODEL` and `RUN_NAME` at the top of
+`train.py`. Comment out `model.load("yolo26n.pt")` only for an intentional
+scratch run.

@@ -13,6 +13,7 @@ from ultralytics.nn.tasks import DetectionModel  # noqa: E402
 
 CASES = (
     ("ultralytics/cfg/models/26/yolo26.yaml", 23),
+    ("ultralytics/cfg/models/26/yolo26n-Paper1-MobileMamba-P3.yaml", 23),
     ("ultralytics/cfg/models/26/yolo26-MobileMamba-Backbone.yaml", 18),
 )
 
