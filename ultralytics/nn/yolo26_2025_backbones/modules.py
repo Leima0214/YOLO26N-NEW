@@ -92,14 +92,7 @@ class EfficientViMBlock(nn.Module):
 class MobileMambaBlock(nn.Module):
     """Mobile-friendly multi-receptive gated mixer for feature maps."""
 
-    def __init__(
-        self,
-        channels: int,
-        small_kernel: int = 3,
-        large_kernel: int = 7,
-        expansion: float = 1.25,
-        init_scale: float = 1e-2,
-    ):
+    def __init__(self, channels: int, small_kernel: int = 3, large_kernel: int = 7, expansion: float = 1.25):
         super().__init__()
         small_kernel = _odd(small_kernel)
         large_kernel = _odd(large_kernel)
@@ -119,7 +112,7 @@ class MobileMambaBlock(nn.Module):
             nn.Conv2d(max(hidden // 4, 8), hidden * 3, 1),
         )
         self.out = Conv(hidden, channels, 1, 1, act=False)
-        self.scale = LayerScale2d(channels, init_scale)
+        self.scale = LayerScale2d(channels, 1e-2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         u, gate = self.in_proj(self.norm(x)).chunk(2, 1)
