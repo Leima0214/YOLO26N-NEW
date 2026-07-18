@@ -1,0 +1,23 @@
+# Japan7: drop D01, D11 and Repair from the 10-class Japan dataset.
+target_names:
+  0: D00
+  1: D10
+  2: D20
+  3: D40
+  4: D43
+  5: D44
+  6: D50
+
+class_map:
+  0: 0
+  2: 1
+  4: 2
+  5: 3
+  6: 4
+  7: 5
+  8: 6
+
+drop_classes:
+  1: D01
+  3: D11
+  9: Repair

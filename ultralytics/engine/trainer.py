@@ -27,6 +27,7 @@ from torch import nn, optim
 from ultralytics import __version__
 from ultralytics.cfg import get_cfg, get_save_dir
 from ultralytics.data.utils import check_cls_dataset, check_det_dataset
+from ultralytics.nn.modules import Detect
 from ultralytics.nn.tasks import load_checkpoint
 from ultralytics.optim import MuSGD
 from ultralytics.utils import (
@@ -62,6 +63,25 @@ from ultralytics.utils.torch_utils import (
     unset_deterministic,
     unwrap_model,
 )
+
+
+def get_musgd_high_lr_parameter_names(model: nn.Module) -> tuple[str, ...]:
+    """Return only Detect classification-head and legacy special-case parameters that receive 3x LR."""
+    model = unwrap_model(model)
+    detect_prefixes = []
+    for module_name, module in model.named_modules():
+        if isinstance(module, Detect):
+            for branch in ("cv3", "one2one_cv3"):
+                if getattr(module, branch, None) is not None:
+                    detect_prefixes.append(f"{module_name}.{branch}" if module_name else branch)
+
+    return tuple(
+        name
+        for name, _ in model.named_parameters()
+        if any(name == prefix or name.startswith(f"{prefix}.") for prefix in detect_prefixes)
+        or "proto.semseg" in name
+        or "flow_model" in name
+    )
 
 
 class BaseTrainer:
@@ -987,21 +1007,26 @@ class BaseTrainer:
         muon, sgd = (0.5, 0.5) if iterations > 10000 else (0.1, 1.0)  # scale factor for MuSGD
         if use_muon:
             g[3] = {"params": g[3], **optim_args, "weight_decay": decay, "use_muon": True, "param_group": "muon"}
-            import re
-
-            # higher lr for certain parameters in MuSGD when funetuning
-            pattern = re.compile(r"(?=.*23)(?=.*cv3)|proto\.semseg|flow_model")
+            high_lr_names = set(get_musgd_high_lr_parameter_names(model))
+            LOGGER.info(
+                f"MuSGD high-LR parameters ({len(high_lr_names)}):\n"
+                + ("\n".join(sorted(high_lr_names)) if high_lr_names else "(none)")
+            )
             g_ = []  # new param groups
             for x in g:
                 p = x.pop("params")
-                p1 = [v for k, v in p.items() if pattern.search(k)]
-                p2 = [v for k, v in p.items() if not pattern.search(k)]
+                p1 = [v for k, v in p.items() if k in high_lr_names]
+                p2 = [v for k, v in p.items() if k not in high_lr_names]
                 g_.extend([{"params": p1, **x, "lr": lr * 3}, {"params": p2, **x}])
             g = g_
         optimizer = getattr(optim, name, partial(MuSGD, muon=muon, sgd=sgd))(params=g)
 
+        group_summary = ", ".join(
+            f"{group['param_group']}{'@3x' if use_muon and group['lr'] == lr * 3 else ''}={len(group['params'])}"
+            for group in g
+        )
         LOGGER.info(
             f"{colorstr('optimizer:')} {type(optimizer).__name__}(lr={lr}, momentum={momentum}) with parameter groups "
-            f"{len(g[1]['params'])} weight(decay=0.0), {len(g[0]['params']) if len(g[0]) else len(g[3]['params'])} weight(decay={decay}), {len(g[2]['params'])} bias(decay=0.0)"
+            f"{group_summary}"
         )
         return optimizer
