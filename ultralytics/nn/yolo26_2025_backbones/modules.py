@@ -159,38 +159,150 @@ class TinyViMBlock(nn.Module):
 class OverLoCKBlock(nn.Module):
     """Overview-first and dynamic local-kernel refinement block."""
 
-    def __init__(self, channels: int, kernels: tuple[int, int, int] | list[int] = (3, 5, 9), context_size: int = 4):
+    def __init__(
+        self,
+        channels: int,
+        kernels: tuple[int, int, int] | list[int] = (3, 5, 9),
+        context_size: int = 4,
+        init_scale: float = 1e-2,
+        direct_overview: bool = True,
+        adaptive_mix: bool = False,
+        channel_spatial_mix: bool = False,
+    ):
         super().__init__()
+        if adaptive_mix and channel_spatial_mix:
+            raise ValueError("adaptive_mix and channel_spatial_mix are mutually exclusive")
+
         k1, k2, k3 = [_odd(k) for k in list(kernels)[:3]]
         self.context_size = max(int(context_size), 1)
+
         self.norm = nn.BatchNorm2d(channels)
+
         self.overview = nn.Sequential(
-            nn.Conv2d(channels, channels, k3, padding=k3 // 2, groups=channels, bias=False),
+            nn.Conv2d(
+                channels,
+                channels,
+                k3,
+                padding=k3 // 2,
+                groups=channels,
+                bias=False,
+            ),
             nn.BatchNorm2d(channels),
             nn.SiLU(inplace=True),
             nn.Conv2d(channels, channels, 1, bias=True),
         )
-        self.local_k1 = nn.Conv2d(channels, channels, k1, padding=k1 // 2, groups=channels, bias=False)
-        self.local_k2 = nn.Conv2d(channels, channels, k2, padding=k2 // 2, groups=channels, bias=False)
-        self.local_k3 = nn.Conv2d(channels, channels, k3, padding=k3 // 2, groups=channels, bias=False)
+
+        self.local_k1 = nn.Conv2d(
+            channels,
+            channels,
+            k1,
+            padding=k1 // 2,
+            groups=channels,
+            bias=False,
+        )
+        self.local_k2 = nn.Conv2d(
+            channels,
+            channels,
+            k2,
+            padding=k2 // 2,
+            groups=channels,
+            bias=False,
+        )
+        self.local_k3 = nn.Conv2d(
+            channels,
+            channels,
+            k3,
+            padding=k3 // 2,
+            groups=channels,
+            bias=False,
+        )
+
         self.router = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(channels, max(channels // 4, 8), 1),
             nn.SiLU(inplace=True),
             nn.Conv2d(max(channels // 4, 8), channels * 3, 1),
         )
+
         self.out = Conv(channels, channels, 1, 1, act=False)
-        self.scale = LayerScale2d(channels, 1e-2)
+        self.scale = LayerScale2d(channels, init_scale)
+
+        self.output_mode = "full" if direct_overview else "local"
+        self.mix_logit = nn.Parameter(torch.zeros(())) if adaptive_mix else None
+
+        # 每张图、每个通道、每个空间位置独立选择 local/overview。
+        self.route_logits = (
+            nn.Conv2d(channels * 3, channels, 1)
+            if channel_spatial_mix
+            else None
+        )
+
+        # 初始 G=0.5，配合乘2后严格还原 local+overview。
+        if self.route_logits is not None:
+            nn.init.zeros_(self.route_logits.weight)
+            nn.init.zeros_(self.route_logits.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_norm = self.norm(x)
+
         overview = F.adaptive_avg_pool2d(x_norm, self.context_size)
         overview = self.overview(overview)
-        overview = F.interpolate(overview, size=x_norm.shape[-2:], mode="bilinear", align_corners=False)
-        branches = torch.stack((self.local_k1(x_norm), self.local_k2(x_norm), self.local_k3(x_norm)), 1)
-        weights = self.router(overview).view(x.shape[0], 3, x.shape[1], 1, 1).softmax(1)
+        overview = F.interpolate(
+            overview,
+            size=x_norm.shape[-2:],
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        branches = torch.stack(
+            (
+                self.local_k1(x_norm),
+                self.local_k2(x_norm),
+                self.local_k3(x_norm),
+            ),
+            1,
+        )
+
+        weights = (
+            self.router(overview)
+            .view(x.shape[0], 3, x.shape[1], 1, 1)
+            .softmax(1)
+        )
         local = (branches * weights).sum(1)
-        return x + self.scale(self.out(local + overview))
+
+        output_mode = getattr(self, "output_mode", "full")
+
+        if output_mode == "local":
+            mixed = local
+        elif output_mode == "overview":
+            mixed = overview
+        elif output_mode == "average":
+            mixed = 0.5 * (local + overview)
+        else:
+            route_logits = getattr(self, "route_logits", None)
+            mix_logit = getattr(self, "mix_logit", None)
+
+            if route_logits is not None:
+                route_input = torch.cat((x_norm, local, overview), 1)
+                local_weight = route_logits(route_input).sigmoid()
+
+                mixed = 2.0 * (
+                    local_weight * local
+                    + (1.0 - local_weight) * overview
+                )
+
+            elif mix_logit is not None:
+                local_weight = mix_logit.sigmoid()
+
+                mixed = 2.0 * (
+                    local_weight * local
+                    + (1.0 - local_weight) * overview
+                )
+
+            else:
+                mixed = local + overview
+
+        return x + self.scale(self.out(mixed))
 
 
 class _YOLOBackboneStage(_C2fAdapterStage):
@@ -252,6 +364,32 @@ class TinyViMStage(_C3k2EnhancedStage):
 
 class OverLoCKStage(_C3k2EnhancedStage):
     enhancer_cls = OverLoCKBlock
+
+
+class OverLoCKDeepStage(C3k2):
+    """Pretrained-compatible C3k2 followed by the two-step P4 refinement used by the full adapter."""
+
+    def __init__(
+        self,
+        c1: int,
+        c2: int,
+        n: int = 1,
+        c3k: bool = False,
+        e: float = 0.5,
+        attn: bool = False,
+        first_kernels: tuple[int, int, int] | list[int] = (3, 5, 9),
+        second_kernels: tuple[int, int, int] | list[int] = (3, 7, 11),
+        context_size: int = 4,
+        init_scale: float = 1e-3,
+    ):
+        super().__init__(c1, c2, n, c3k=c3k, e=e, attn=attn)
+        self.enhance = nn.Sequential(
+            OverLoCKBlock(c2, first_kernels, context_size, init_scale),
+            OverLoCKBlock(c2, second_kernels, context_size, init_scale),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.enhance(super().forward(x))
 
 
 class VisionBackboneFeatureIndex(nn.Module):
