@@ -1,0 +1,12 @@
+path: /root/YOLO26N-NEW/configs/japan7_v2_scene_disjoint
+train: split_manifest_train.txt
+val: split_manifest_val.txt
+nc: 7
+names:
+  0: D00
+  1: D10
+  2: D20
+  3: D40
+  4: D43
+  5: D44
+  6: D50

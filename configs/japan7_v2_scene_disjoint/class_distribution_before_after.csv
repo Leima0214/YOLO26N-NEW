@@ -1,0 +1,5 @@
+version,split,images,empty_labels,class_D00,class_D10,class_D20,class_D40,class_D43,class_D44,class_D50,small,medium,large
+oldsplit,train,8387,638,3238,3192,4964,1818,598,3118,2824,2234,8348,9170
+oldsplit,val,2119,156,811,787,1234,425,138,877,728,556,2049,2395
+japan7_v2_scene_disjoint,train,8404,635,3222,3178,4974,1786,587,3191,2827,2201,8305,9259
+japan7_v2_scene_disjoint,val,2102,159,827,801,1224,457,149,804,725,589,2092,2306

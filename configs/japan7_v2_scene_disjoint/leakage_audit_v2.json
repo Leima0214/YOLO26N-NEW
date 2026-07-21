@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "dataset": "Japan7-v2-scene-disjoint",
+  "source_images": 10506,
+  "train_images": 8404,
+  "val_images": 2102,
+  "val_fraction_before": 0.2016942699409861,
+  "val_fraction_after": 0.20007614696363982,
+  "scene_group_count": 224,
+  "exact_duplicate_pair_count": 0,
+  "phash_le_2_pair_count": 46,
+  "confirmed_near_duplicate_pair_count": 8,
+  "exact_duplicate_cross_split_count": 0,
+  "phash_le_2_cross_split_count": 0,
+  "confirmed_near_duplicate_cross_split_count": 0,
+  "scene_group_cross_split_count": 0,
+  "checks": {
+    "all_source_images_preserved": true,
+    "train_val_file_overlap_zero": true,
+    "exact_duplicate_cross_split_zero": true,
+    "phash_le_2_cross_split_zero": true,
+    "confirmed_near_duplicate_cross_split_zero": true,
+    "scene_group_cross_split_zero": true,
+    "broken_image_or_label_zero": true,
+    "all_classes_in_both_splits": true,
+    "labels_well_formed_and_class_ids_valid": true
+  }
+}

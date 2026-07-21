@@ -300,7 +300,7 @@ def main() -> None:
     }
     distribution_path = OUTPUT_ROOT / "class_distribution_before_after.csv"
     with distribution_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["version", "split", *METRIC_NAMES])
+        writer = csv.DictWriter(handle, fieldnames=["version", "split", *METRIC_NAMES], lineterminator="\n")
         writer.writeheader()
         for version, values in (("oldsplit", old_stats), ("japan7_v2_scene_disjoint", new_stats)):
             for split in ("train", "val"):
