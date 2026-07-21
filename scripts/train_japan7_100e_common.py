@@ -13,10 +13,7 @@ from ultralytics import YOLO
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA = REPO_ROOT / "configs/japan7_remote.yaml"
 WEIGHTS = REPO_ROOT / "yolo26n.pt"
-AUDIT = REPO_ROOT / "reports/dataset_integrity_and_leakage_audit.json"
-PROJECT = REPO_ROOT / "runs/paper1/exploratory_oldsplit"
 KNOWN_AUDIT_STATUS = "FAIL_CONFIRMED_NEAR_DUPLICATE_LEAKAGE"
 DEVELOPMENT_SPLIT_STATUS = "KNOWN_NEAR_DUPLICATE_DEVELOPMENT_SPLIT"
 
@@ -92,46 +89,66 @@ def resolve_split_status(audit_status: str, allow_known_development_split: bool)
     )
 
 
-def record_split_scope(trainer, split_status: str) -> None:
+def record_split_scope(trainer, split_status: str, allow_known_development_split: bool, result_scope: str) -> None:
     save_dir = Path(trainer.save_dir)
     args_path = save_dir / "args.yaml"
     with args_path.open("a", encoding="utf-8") as handle:
         handle.write(
             f"split_status: {split_status}\n"
-            "allow_known_development_split: true\n"
-            "result_scope: exploratory_oldsplit_not_final_benchmark\n"
+            f"allow_known_development_split: {str(allow_known_development_split).lower()}\n"
+            f"result_scope: {result_scope}\n"
         )
-    (save_dir / "exploratory_oldsplit_scope.md").write_text(
-        "# exploratory_oldsplit — development split only\n\n"
+    (save_dir / f"{result_scope}_scope.md").write_text(
+        f"# {result_scope}\n\n"
         f"- split_status={split_status}\n"
-        "- Contains documented train/val near-duplicate scenes.\n"
-        "- Use only for paired long-convergence exploration; not a clean test or final paper benchmark.\n",
+        + (
+            "- Contains documented train/val near-duplicate scenes.\n"
+            "- Use only for paired long-convergence exploration; not a clean test or final paper benchmark.\n"
+            if result_scope.startswith("exploratory_oldsplit")
+            else "- Scene-grouped split candidate; report separately from the historical development split.\n"
+        ),
         encoding="utf-8",
     )
 
 
-def run(model_yaml: str, run_name: str, gate_layer: int | None = None) -> None:
+def run(model_yaml: str, run_name: str, gate_layer: int | None = None, dataset: str = "oldsplit") -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--allow-known-development-split", action="store_true")
     args = parser.parse_args()
-    audit = json.loads(AUDIT.read_text(encoding="utf-8"))
+    if dataset == "oldsplit":
+        data = REPO_ROOT / "configs/japan7_remote.yaml"
+        audit_path = REPO_ROOT / "reports/dataset_integrity_and_leakage_audit.json"
+        project = REPO_ROOT / "runs/paper1/exploratory_oldsplit"
+        result_scope = "exploratory_oldsplit_not_final_benchmark"
+    elif dataset == "v2":
+        data = REPO_ROOT / "configs/japan7_v2_scene_disjoint/dataset.yaml"
+        audit_path = REPO_ROOT / "configs/japan7_v2_scene_disjoint/leakage_audit_v2.json"
+        project = REPO_ROOT / "runs/paper1/japan7_v2_scene_disjoint"
+        result_scope = "japan7_v2_scene_disjoint_candidate"
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
+
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
     split_status = resolve_split_status(audit.get("status", "MISSING_STATUS"), args.allow_known_development_split)
-    if not DATA.is_file() or not WEIGHTS.is_file():
-        raise FileNotFoundError(f"Missing data config or weights: {DATA}, {WEIGHTS}")
+    if not data.is_file() or not WEIGHTS.is_file():
+        raise FileNotFoundError(f"Missing data config or weights: {data}, {WEIGHTS}")
 
     print(f"split_status={split_status}", flush=True)
-    print("result_scope=exploratory_oldsplit_not_final_benchmark", flush=True)
+    print(f"result_scope={result_scope}", flush=True)
 
     model = YOLO(str(REPO_ROOT / model_yaml))
     model.load(str(WEIGHTS))
     telemetry = EpochTelemetry(gate_layer)
-    model.add_callback("on_pretrain_routine_start", lambda trainer: record_split_scope(trainer, split_status))
+    model.add_callback(
+        "on_pretrain_routine_start",
+        lambda trainer: record_split_scope(trainer, split_status, args.allow_known_development_split, result_scope),
+    )
     model.add_callback("on_train_start", telemetry.train_start)
     model.add_callback("on_train_epoch_start", telemetry.epoch_start)
     model.add_callback("on_fit_epoch_end", telemetry.fit_epoch_end)
     model.train(
-        data=str(DATA),
-        project=str(PROJECT.resolve()),
+        data=str(data),
+        project=str(project.resolve()),
         name=run_name,
         epochs=100,
         patience=1_000_000_000,
