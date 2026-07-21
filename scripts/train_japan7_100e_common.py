@@ -6,13 +6,15 @@ import argparse
 import csv
 import json
 from pathlib import Path
+import sys
 
 import torch
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
 from ultralytics import YOLO
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 WEIGHTS = REPO_ROOT / "yolo26n.pt"
 KNOWN_AUDIT_STATUS = "FAIL_CONFIRMED_NEAR_DUPLICATE_LEAKAGE"
 DEVELOPMENT_SPLIT_STATUS = "KNOWN_NEAR_DUPLICATE_DEVELOPMENT_SPLIT"
