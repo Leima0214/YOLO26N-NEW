@@ -1,0 +1,365 @@
+{
+  "status": "FAIL_CONFIRMED_NEAR_DUPLICATE_LEAKAGE",
+  "dataset_root": "/yolo26-probe/derived/japan7",
+  "integrity": {
+    "train": {
+      "images": 8387,
+      "missing_labels": 0,
+      "empty_labels": 638,
+      "bad_lines": 0,
+      "out_of_bounds": 0,
+      "duplicate_lines": 0,
+      "class_counts": {
+        "0": 3238,
+        "1": 3192,
+        "2": 4964,
+        "3": 1818,
+        "4": 598,
+        "5": 3118,
+        "6": 2824
+      },
+      "bad_class_ids": []
+    },
+    "val": {
+      "images": 2119,
+      "missing_labels": 0,
+      "empty_labels": 156,
+      "bad_lines": 0,
+      "out_of_bounds": 0,
+      "duplicate_lines": 0,
+      "class_counts": {
+        "0": 811,
+        "1": 787,
+        "2": 1234,
+        "3": 425,
+        "4": 138,
+        "5": 877,
+        "6": 728
+      },
+      "bad_class_ids": []
+    }
+  },
+  "filename_overlap_count": 0,
+  "exact_cross_split_duplicate_count": 0,
+  "closest_phash_distance_histogram": {
+    "0": 3,
+    "2": 5,
+    "4": 17,
+    "6": 40,
+    "8": 106,
+    "10": 352,
+    "12": 594,
+    "14": 595,
+    "16": 351,
+    "18": 54,
+    "20": 2
+  },
+  "closest_phash_pairs": [
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012154.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002156.jpg",
+      "phash_distance": 0
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000317.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_007688.jpg",
+      "phash_distance": 0
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_005550.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_012402.jpg",
+      "phash_distance": 0
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002533.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001990.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_003130.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_004433.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_005451.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005289.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012598.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_009306.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_001303.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_009326.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002509.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_000634.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000735.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001121.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012495.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001656.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_004987.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002321.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_011909.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_004847.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_003745.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005197.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_005756.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005843.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_003452.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_006335.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_001853.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_006545.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008191.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_006870.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002102.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_008592.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_005802.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_008907.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012941.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_009107.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008149.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_009521.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008001.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_010402.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_009339.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_012465.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_003861.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_013064.jpg",
+      "phash_distance": 4
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002491.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_000908.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000423.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001173.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_009397.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001235.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000170.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001293.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012191.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001338.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_011024.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001861.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002440.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002003.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002331.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002427.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000487.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002792.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000170.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002926.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008196.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002989.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012345.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_003368.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_010545.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_003414.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_009231.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_003431.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_009785.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_004724.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008315.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005149.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008704.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005158.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000137.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005239.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_009918.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005318.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002075.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005656.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008120.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005864.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_008704.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_006166.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_006241.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_006364.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_003696.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_006664.jpg",
+      "phash_distance": 6
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000871.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_006782.jpg",
+      "phash_distance": 6
+    }
+  ],
+  "near_duplicate_pair_count_phash_le_2": 8,
+  "near_duplicate_pairs_phash_le_2": [
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012154.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_002156.jpg",
+      "phash_distance": 0
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_000317.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_007688.jpg",
+      "phash_distance": 0
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_005550.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_012402.jpg",
+      "phash_distance": 0
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_002533.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_001990.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_003130.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_004433.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_005451.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_005289.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_012598.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_009306.jpg",
+      "phash_distance": 2
+    },
+    {
+      "train": "/yolo26-probe/derived/japan7/images/train/Japan_Japan_001303.jpg",
+      "val": "/yolo26-probe/derived/japan7/images/val/Japan_Japan_009326.jpg",
+      "phash_distance": 2
+    }
+  ],
+  "nearest_sequence_distance_histogram_capped_at_11": {
+    "1": 1869,
+    "2": 230,
+    "3": 16,
+    "4": 3,
+    "5": 1
+  },
+  "adjacent_high_similarity_count": 0,
+  "adjacent_high_similarity_pairs": [],
+  "symlink_targets": {
+    "train_sample": "/yolo26-probe/japan_yolo/images/train/Japan_Japan_000000.jpg",
+    "val_sample": "/yolo26-probe/japan_yolo/images/val/Japan_Japan_000001.jpg"
+  }
+}
