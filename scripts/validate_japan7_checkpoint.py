@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from ultralytics import YOLO  # noqa: E402
+from ultralytics.utils.torch_utils import get_flops  # noqa: E402
 
 
 def main() -> None:
@@ -66,6 +67,11 @@ def main() -> None:
         }
 
     payload = {
+        "model": {
+            "parameters": sum(parameter.numel() for parameter in model.model.parameters()),
+            "gflops_640": float(get_flops(model.model, imgsz=640)),
+        },
+        "speed_ms_per_image": {key: float(value) for key, value in metrics.speed.items()},
         "aggregate": {
             "precision": float(metrics.box.mp),
             "recall": float(metrics.box.mr),
