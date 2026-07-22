@@ -41,7 +41,11 @@ def metrics_payload(metrics, names: dict[int, str]) -> dict:
         "map75": float(box.map75),
         "map50_95": float(box.map),
         "classes": {
-            names[index]: {"map50": float(box.ap50[index]), "map50_95": float(box.maps[index])}
+            names[index]: {
+                "map50": float(box.ap50[index]),
+                "map75": float(box.all_ap[index, 5]),
+                "map50_95": float(box.maps[index]),
+            }
             for index in range(len(box.maps))
         },
         "speed_ms_per_image": {key: float(value) for key, value in metrics.speed.items()},
