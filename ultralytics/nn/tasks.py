@@ -581,7 +581,8 @@ class DetectionModel(BaseModel):
 
     def _predict_once(self, x, profile=False, visualize=False, embed=None):
         """Run one forward pass, optionally inserting YOLO26-native LiteRG guidance."""
-        if self.lite_rg is None:
+        lite_rg = getattr(self, "lite_rg", None)
+        if lite_rg is None:
             return super()._predict_once(x, profile, visualize, embed)
 
         y, dt, embeddings = [], [], []
@@ -602,7 +603,7 @@ class DetectionModel(BaseModel):
             if m.i in source_indices:
                 source_features[m.i] = x
             if m.i == indices["backbone_end"]:
-                p3, p4, residual3, residual4, region_logits = self.lite_rg.guide_backbone(
+                p3, p4, residual3, residual4, region_logits = lite_rg.guide_backbone(
                     source_features[indices["p2"]],
                     source_features[indices["p3"]],
                     source_features[indices["p4"]],
@@ -610,9 +611,9 @@ class DetectionModel(BaseModel):
                 y[indices["p3"]] = p3
                 y[indices["p4"]] = p4
             elif m.i == indices["n3"]:
-                x = self.lite_rg.fuse_neck3(x, residual3)
+                x = lite_rg.fuse_neck3(x, residual3)
             elif m.i == indices["n4"]:
-                x = self.lite_rg.fuse_neck4(x, residual4)
+                x = lite_rg.fuse_neck4(x, residual4)
 
             y.append(x if m.i in self.save else None)
             if visualize:
@@ -696,7 +697,7 @@ class DetectionModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
-        if self.lite_rg is not None:
+        if getattr(self, "lite_rg", None) is not None:
             return LiteRGE2ELoss(self) if getattr(self, "end2end", False) else LiteRGDetectionLoss(self)
         return E2ELoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
 
