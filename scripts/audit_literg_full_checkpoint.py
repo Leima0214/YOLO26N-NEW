@@ -25,7 +25,7 @@ assert ULTRALYTICS_ROOT.is_relative_to(ROOT), f"Imported ultralytics outside rep
 from ultralytics import YOLO  # noqa: E402
 from ultralytics.models.yolo.detect import DetectionTrainer  # noqa: E402
 from ultralytics.utils import YAML  # noqa: E402
-from ultralytics.utils.torch_utils import de_parallel  # noqa: E402
+from ultralytics.utils.torch_utils import unwrap_model  # noqa: E402
 
 
 SCALARS = ("gamma3", "gamma4", "eta3", "eta4")
@@ -230,7 +230,7 @@ def main() -> None:
         if path is not None and not path.exists():
             raise FileNotFoundError(path)
     yolo = YOLO(str(args.checkpoint))
-    core = de_parallel(yolo.model)
+    core = unwrap_model(yolo.model)
     lite_rg = getattr(core, "lite_rg", None)
     if lite_rg is None:
         raise RuntimeError("LiteRG is missing after independent checkpoint load.")

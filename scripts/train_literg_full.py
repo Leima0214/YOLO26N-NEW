@@ -24,7 +24,7 @@ assert ULTRALYTICS_ROOT.is_relative_to(ROOT), f"Imported ultralytics outside rep
 
 from ultralytics import YOLO  # noqa: E402
 from ultralytics.utils import YAML  # noqa: E402
-from ultralytics.utils.torch_utils import de_parallel  # noqa: E402
+from ultralytics.utils.torch_utils import unwrap_model  # noqa: E402
 
 
 MODEL_YAML = ROOT / "ultralytics/cfg/models/26/yolo26-literg.yaml"
@@ -107,7 +107,7 @@ class LiteRGTelemetry:
         self.diagnostic_log = diagnostic_log
 
     def pretrain_end(self, trainer) -> None:
-        core = de_parallel(trainer.model)
+        core = unwrap_model(trainer.model)
         lite_rg = core.lite_rg
         config = core.yaml["lite_rg"]
         schedule = progressive_schedule(trainer.epochs, float(config["region_gain"]), float(config["region_floor"]))
@@ -162,7 +162,7 @@ class LiteRGTelemetry:
     def fit_epoch_end(self, trainer) -> None:
         if not self.diagnostic_log:
             return
-        core = de_parallel(trainer.model)
+        core = unwrap_model(trainer.model)
         criterion = core.criterion
         o2m_used = max(1 - trainer.epoch / max(trainer.epochs - 1, 1), 0) * 0.7 + 0.1
         effective_lambda_used = float(criterion.region_gain * max(o2m_used, criterion.region_floor))
