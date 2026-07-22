@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import tempfile
 from pathlib import Path
 
-from ultralytics import YOLO
-from ultralytics.utils import YAML
-
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import ultralytics  # noqa: E402
+
+ULTRALYTICS_ROOT = Path(ultralytics.__file__).resolve().parent
+assert ULTRALYTICS_ROOT.is_relative_to(ROOT), f"Imported ultralytics outside repository: {ULTRALYTICS_ROOT}"
+
+from ultralytics import YOLO  # noqa: E402
+from ultralytics.utils import YAML  # noqa: E402
+
+
 BASELINE_MODEL = ROOT / "ultralytics/cfg/models/26/yolo26n.yaml"
-LITERG_MODEL = ROOT / "ultralytics/cfg/models/26/yolo26n-literg.yaml"
+LITERG_MODEL = ROOT / "ultralytics/cfg/models/26/yolo26-literg.yaml"
 PROJECT = ROOT / "runs/paper1_literg"
 STAGES = {
     "B0": {},
@@ -51,6 +59,7 @@ def build_model(stage: str) -> YOLO:
     if stage == "B0":
         return YOLO(str(BASELINE_MODEL))
 
+    assert LITERG_MODEL.is_file(), LITERG_MODEL
     config = YAML.load(LITERG_MODEL)
     config["scale"] = "n"
     stage_config = dict(STAGES[stage])
@@ -61,7 +70,14 @@ def build_model(stage: str) -> YOLO:
     handle.close()
     try:
         YAML.save(temporary_yaml, config)
-        return YOLO(str(temporary_yaml))
+        model = YOLO(str(temporary_yaml))
+        assert model.model.lite_rg is not None
+        lite_rg_parameters = sum(parameter.numel() for parameter in model.model.lite_rg.parameters())
+        assert lite_rg_parameters > 0
+        if stage in {"B4", "B5", "B6", "B7"}:
+            assert lite_rg_parameters == 91787, lite_rg_parameters
+        assert any(name.startswith("lite_rg.") for name in model.model.state_dict())
+        return model
     finally:
         temporary_yaml.unlink(missing_ok=True)
 
