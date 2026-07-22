@@ -214,6 +214,7 @@ def main() -> None:
     region_rows, geometry_rows, failure_rows = [], [], []
     class_geometry = defaultdict(lambda: {"areas": [], "aspect": [], "instances_per_image": []})
     failure_counts = {0: Counter(), 1: Counter()}
+    false_positive_counts = {0: Counter(), 1: Counter()}
     confusion_counts = {0: Counter(), 1: Counter()}
     saved_categories = set()
     saved_failure_panels = 0
@@ -256,7 +257,16 @@ def main() -> None:
                     area = float(box[2] * box[3])
                     signed_aspect = float(box[2] / max(box[3], 1e-12))
                     long_short = max(signed_aspect, 1 / max(signed_aspect, 1e-12))
-                    ground_truth.append({"class_id": class_id, "xyxy": xyxy, "label_index": label_index})
+                    ground_truth.append(
+                        {
+                            "class_id": class_id,
+                            "xyxy": xyxy,
+                            "label_index": label_index,
+                            "area_fraction": area,
+                            "signed_width_height_ratio": signed_aspect,
+                            "long_short_ratio": long_short,
+                        }
+                    )
                     geometry_rows.append(
                         {
                             "image": image_path,
@@ -339,6 +349,7 @@ def main() -> None:
                     failure_counts[class_id][reason] += 1
                     if reason != "true_positive":
                         row = {
+                            "case_type": "ground_truth_failure",
                             "image": image_path,
                             "target_class": names[class_id],
                             "label_index": gt["label_index"],
@@ -347,9 +358,54 @@ def main() -> None:
                             "best_same_class_confidence": same_pred["confidence"] if same_pred else None,
                             "confused_with": names[other_pred["class_id"]] if reason == "classification_confusion" else None,
                             "best_other_iou": other_iou,
+                            "area_fraction": gt["area_fraction"],
+                            "signed_width_height_ratio": gt["signed_width_height_ratio"],
+                            "long_short_ratio": gt["long_short_ratio"],
                         }
                         failure_rows.append(row)
                         image_failures.append(row)
+
+                for prediction_index, prediction in enumerate(predictions):
+                    class_id = prediction["class_id"]
+                    if class_id not in TARGET_CLASSES:
+                        continue
+                    same_gt = [
+                        box_iou(prediction["xyxy"], gt["xyxy"])
+                        for gt in ground_truth
+                        if gt["class_id"] == class_id
+                    ]
+                    best_same_iou = max(same_gt, default=0.0)
+                    if best_same_iou >= args.match_iou:
+                        continue
+                    other_gt = [
+                        (box_iou(prediction["xyxy"], gt["xyxy"]), gt)
+                        for gt in ground_truth
+                        if gt["class_id"] != class_id
+                    ]
+                    best_other_iou, best_other_gt = max(other_gt, default=(0.0, None), key=lambda item: item[0])
+                    if best_same_iou >= 0.10:
+                        reason = "localization_false_positive"
+                    elif best_other_iou >= args.match_iou:
+                        reason = "class_confusion_false_positive"
+                    else:
+                        reason = "background_false_positive"
+                    false_positive_counts[class_id][reason] += 1
+                    row = {
+                        "case_type": "false_positive",
+                        "image": image_path,
+                        "target_class": names[class_id],
+                        "label_index": prediction_index,
+                        "reason": reason,
+                        "best_same_class_iou": best_same_iou,
+                        "best_same_class_confidence": prediction["confidence"],
+                        "confused_with": names[best_other_gt["class_id"]] if best_other_gt else None,
+                        "best_other_iou": best_other_iou,
+                        "area_fraction": None,
+                        "signed_width_height_ratio": None,
+                        "long_short_ratio": None,
+                    }
+                    failure_rows.append(row)
+                    image_failures.append(row)
 
                 for class_id, class_name in names.items():
                     if class_name in saved_categories or not any(gt["class_id"] == class_id for gt in ground_truth):
@@ -419,6 +475,8 @@ def main() -> None:
             "counts": dict(counts),
             "proportions": {key: value / max(total, 1) for key, value in counts.items()},
             "confusions": dict(confusion_counts[class_id]),
+            "false_positive_counts": dict(false_positive_counts[class_id]),
+            "false_positives": sum(false_positive_counts[class_id].values()),
         }
     summary = {
         "checkpoint": str(args.checkpoint),

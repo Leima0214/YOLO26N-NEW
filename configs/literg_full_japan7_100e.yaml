@@ -28,6 +28,6 @@ close_mosaic: 10
 iou: 0.7
 max_det: 300
 save: true
-save_period: -1
+save_period: 10
 val: true
 plots: true
