@@ -1,0 +1,75 @@
+{
+  "run_definition": "B5 full LiteRG signal run on c11da7b",
+  "source_commit": "c11da7b322a91596c33664c813c70c17adb99de8",
+  "run_directory": "/root/YOLO26N-NEW-LiteRG-9e94269/runs/paper1_literg/literg_b5_japan7_30e_seed42",
+  "environment": {
+    "python": "3.11.10",
+    "torch": "2.5.1+cu124",
+    "cuda_runtime": "12.4",
+    "gpu": "NVIDIA GeForce RTX 4090"
+  },
+  "checkpoints": {
+    "best_sha256": "282bc67675c2a52e839f425d2f11d36b82befab8fcb5362f0d7d0eee9cd294c0",
+    "last_sha256": "7d326059023e71a6128ebf73ff03173117fa0a7e424a106b601698698d2cc0c9",
+    "tensor_state_keys": 758,
+    "nonidentical_tensor_keys": 0,
+    "optimizer_stripped": true
+  },
+  "matched_30e_default_one_to_one": {
+    "b0": {"precision": 0.5834111463, "recall": 0.5533046409, "map50": 0.5715254132, "map50_95": 0.3179938589},
+    "b5": {"precision": 0.5877042574, "recall": 0.5541529755, "map50": 0.5729897973, "map50_95": 0.3182554600},
+    "b5_minus_b0": {"precision": 0.0042931111, "recall": 0.0008483346, "map50": 0.0014643840, "map50_95": 0.0002616011}
+  },
+  "same_b5_checkpoint_heads": {
+    "one_to_one": {"precision": 0.5877042574, "recall": 0.5541529755, "map50": 0.5729897973, "map75": 0.3090717399, "map50_95": 0.3182554600},
+    "one_to_many": {"precision": 0.6423393247, "recall": 0.5795511766, "map50": 0.6253995356, "map75": 0.3333762324, "map50_95": 0.3452349773}
+  },
+  "model_integrity": {
+    "unfused_parameters": 2598317,
+    "fused_parameters": 2467988,
+    "fused_b0_parameters": 2376201,
+    "lite_rg_parameters": 91787,
+    "lite_rg_state_keys": 50,
+    "fused_parameter_arithmetic_matches": true,
+    "fuse_prediction_max_abs_difference": 0.0010528564,
+    "fuse_prediction_mean_abs_difference": 0.0000404473,
+    "torchscript_export_passed": true
+  },
+  "residual_scalars": {
+    "gamma3": -0.0079956055,
+    "gamma4": -0.0045738220,
+    "eta3": 0.0024185181,
+    "eta4": -0.0041351318
+  },
+  "full_loss_gradient_norms": {
+    "prior": 1.2872515917,
+    "drg3": 0.1807750911,
+    "drg4": 0.0979261398,
+    "rff3": 0.1376130134,
+    "rff4": 0.0763529539,
+    "gamma3": 0.0329987109,
+    "gamma4": 0.0902125016,
+    "eta3": 1.3662538528,
+    "eta4": 0.6303244233,
+    "backbone": 48.4097137451,
+    "neck": 35.7149581909,
+    "one_to_many_head": 21.0205478668,
+    "one_to_one_head": 6.9587731361
+  },
+  "region_prior_validation": {
+    "images": 2119,
+    "raw_bce_mean": 0.1553919087,
+    "raw_dice_loss_mean": 0.7970491205,
+    "raw_bce_plus_dice_mean": 0.9524410292,
+    "effective_lambda_epoch30": 0.1,
+    "weighted_region_loss_mean": 0.0952441029,
+    "probability_mean": 0.0697768541,
+    "probability_over_0_5_ratio": 0.0413701451,
+    "gt_over_0_5_ratio": 0.0347064217,
+    "binary_iou_mean": 0.1497456601,
+    "soft_dice_mean": 0.2029508795,
+    "foreground_response_mean": 0.2896818455,
+    "background_response_mean": 0.0396688961
+  },
+  "verdict": "Default B5 one-to-one is statistically an engineering tie with B0 at 30 epochs. All LiteRG mechanisms execute and receive gradients, but the deploy-head gain is not yet established. The large same-checkpoint O2M advantage and rising last-10-epoch curve justify one clean 100-epoch restart."
+}

@@ -156,6 +156,7 @@ def run_gradient_audit(core: torch.nn.Module, trainer, batch: dict) -> dict:
 
 def optimizer_audit(core: torch.nn.Module, trainer, epochs: int, dataset_size: int, batch_size: int) -> dict:
     iterations = math.ceil(dataset_size / max(batch_size, trainer.args.nbs)) * epochs
+    last_logged_factor = (1 - (epochs - 1) / epochs) * (1 - trainer.args.lrf) + trainer.args.lrf
     optimizer = trainer.build_optimizer(
         core,
         name="auto",
@@ -190,7 +191,8 @@ def optimizer_audit(core: torch.nn.Module, trainer, epochs: int, dataset_size: i
                     "parameter_tensors": len(selected),
                     "parameters": sum(parameter.numel() for parameter in selected),
                     "initial_lr": float(group["lr"]),
-                    "theoretical_final_lr": float(group["lr"] * trainer.args.lrf),
+                    "expected_epoch_n_logged_lr": float(group["lr"] * last_logged_factor),
+                    "asymptotic_lrf_endpoint": float(group["lr"] * trainer.args.lrf),
                     "weight_decay": float(group.get("weight_decay", 0.0)),
                     "use_muon": bool(group.get("use_muon", False)),
                     "frozen_parameters": sum(parameter.numel() for parameter in selected if not parameter.requires_grad),
