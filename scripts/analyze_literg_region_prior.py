@@ -189,6 +189,26 @@ def main() -> None:
         core.lite_rg.drg4.register_forward_hook(
             lambda _module, _inputs, output: responses.__setitem__("p4", output.detach().float().abs().mean(1, keepdim=True))
         ),
+        core.lite_rg.drg3.horizontal.register_forward_hook(
+            lambda _module, _inputs, output: responses.__setitem__(
+                "drg3_horizontal", output.detach().float().abs().mean((1, 2, 3))
+            )
+        ),
+        core.lite_rg.drg3.vertical.register_forward_hook(
+            lambda _module, _inputs, output: responses.__setitem__(
+                "drg3_vertical", output.detach().float().abs().mean((1, 2, 3))
+            )
+        ),
+        core.lite_rg.drg4.horizontal.register_forward_hook(
+            lambda _module, _inputs, output: responses.__setitem__(
+                "drg4_horizontal", output.detach().float().abs().mean((1, 2, 3))
+            )
+        ),
+        core.lite_rg.drg4.vertical.register_forward_hook(
+            lambda _module, _inputs, output: responses.__setitem__(
+                "drg4_vertical", output.detach().float().abs().mean((1, 2, 3))
+            )
+        ),
     ]
     core.eval()
     region_rows, geometry_rows, failure_rows = [], [], []
@@ -289,6 +309,12 @@ def main() -> None:
                         "soft_dice": 1.0 - raw_dice,
                         "foreground_response": float(probability[foreground].mean().cpu()) if foreground.any() else None,
                         "background_response": float(probability[background].mean().cpu()) if background.any() else None,
+                        "drg3_horizontal_response": float(responses["drg3_horizontal"][image_index].cpu()),
+                        "drg3_vertical_response": float(responses["drg3_vertical"][image_index].cpu()),
+                        "drg4_horizontal_response": float(responses["drg4_horizontal"][image_index].cpu()),
+                        "drg4_vertical_response": float(responses["drg4_vertical"][image_index].cpu()),
+                        "contains_D00": int(0 in image_classes),
+                        "contains_D10": int(1 in image_classes),
                     }
                 )
 
@@ -364,6 +390,18 @@ def main() -> None:
 
     numeric_region_keys = [key for key, value in region_rows[0].items() if key != "image" and isinstance(value, (int, float))]
     region_summary = {key: quantiles([float(row[key]) for row in region_rows if row[key] is not None]) for key in numeric_region_keys}
+    directional_by_target = {
+        class_name: {
+            key: quantiles([float(row[key]) for row in region_rows if row[f"contains_{class_name}"]])
+            for key in (
+                "drg3_horizontal_response",
+                "drg3_vertical_response",
+                "drg4_horizontal_response",
+                "drg4_vertical_response",
+            )
+        }
+        for class_name in ("D00", "D10")
+    }
     class_summary = {}
     for class_id, class_name in names.items():
         values = class_geometry[class_id]
@@ -389,6 +427,7 @@ def main() -> None:
         "region_config": config,
         "effective_lambda_at_requested_epoch": effective_lambda,
         "region_prior": region_summary,
+        "directional_response_by_target_image": directional_by_target,
         "class_geometry": class_summary,
         "d00_d10_operating_point": {"confidence": args.conf, "iou": args.match_iou},
         "d00_d10_failures": target_failure_summary,
