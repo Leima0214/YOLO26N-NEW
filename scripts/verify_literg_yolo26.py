@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import torch
 
-from ultralytics import YOLO
-from ultralytics.nn.tasks import DetectionModel
-from ultralytics.utils.torch_utils import get_flops, intersect_dicts
-
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import ultralytics  # noqa: E402
+
+ULTRALYTICS_ROOT = Path(ultralytics.__file__).resolve().parent
+assert ULTRALYTICS_ROOT.is_relative_to(ROOT), f"Imported ultralytics outside repository: {ULTRALYTICS_ROOT}"
+
+from ultralytics import YOLO  # noqa: E402
+from ultralytics.cfg import get_cfg  # noqa: E402
+from ultralytics.nn.tasks import DetectionModel  # noqa: E402
+from ultralytics.utils.torch_utils import get_flops, intersect_dicts  # noqa: E402
+
+
 BASELINE = ROOT / "ultralytics/cfg/models/26/yolo26n.yaml"
 CANDIDATE = ROOT / "ultralytics/cfg/models/26/yolo26n-literg.yaml"
 
@@ -30,6 +39,7 @@ def main() -> None:
     torch.manual_seed(42)
     device = torch.device(args.device)
 
+    print("[1/4] model build checks")
     baseline = YOLO(str(BASELINE))
     candidate = YOLO(str(CANDIDATE))
     baseline_state = baseline.model.state_dict()
@@ -40,6 +50,7 @@ def main() -> None:
     assert not missing_baseline, f"B0 keys lost or reshaped: {missing_baseline[:10]}"
     assert new_items and all(name.startswith("lite_rg.") for name in new_items), new_items[:10]
 
+    print("[2/4] pretrained transfer checks")
     baseline.load(args.weights)
     candidate.load(args.weights)
     shared_pretrained = intersect_dicts(baseline.model.state_dict(), candidate.model.state_dict())
@@ -55,6 +66,15 @@ def main() -> None:
     ]
     assert not unexpected_japan7, unexpected_japan7[:10]
 
+    print("[3/4] Trainer-equivalent hyperparameter initialization")
+    candidate.model.args = get_cfg(candidate.model.args)
+    assert not isinstance(candidate.model.args, dict)
+    assert hasattr(candidate.model.args, "box")
+    assert hasattr(candidate.model.args, "cls")
+    assert hasattr(candidate.model.args, "dfl")
+    assert hasattr(candidate.model.args, "epochs")
+
+    print("[4/4] forward/backward checks")
     baseline.model.to(device).eval()
     candidate.model.to(device).eval()
     image = torch.randn(1, 3, args.imgsz, args.imgsz, device=device)
