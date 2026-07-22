@@ -156,6 +156,7 @@ from ultralytics.nn.yolo26_eccv2026 import (
     S2FracMixC2f,
     S2FracMixFusion,
 )
+from ultralytics.nn.yolo26_literg import ProgressiveLiteRG
 from ultralytics.nn.se import SEAttention
 from ultralytics.nn.spdconv import space_to_depth
 from ultralytics.nn.ShuffleNetV2 import ShuffleNetV2, Conv_maxpool
@@ -180,6 +181,8 @@ from ultralytics.utils.checks import check_requirements, check_suffix, check_yam
 from ultralytics.nn. SlimNeck import VoVGSCSP, VoVGSCSPC, GSConv
 from ultralytics.utils.loss import (
     E2ELoss,
+    LiteRGDetectionLoss,
+    LiteRGE2ELoss,
     PoseLoss26,
     v8ClassificationLoss,
     v8DetectionLoss,
@@ -502,6 +505,44 @@ class DetectionModel(BaseModel):
             LOGGER.info(f"Overriding model.yaml nc={self.yaml['nc']} with nc={nc}")
             self.yaml["nc"] = nc  # override YAML value
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)  # model, savelist
+        self.lite_rg = None
+        self.lite_rg_indices = None
+        lite_rg_cfg = self.yaml.get("lite_rg", {})
+        if lite_rg_cfg.get("enabled", False):
+            indices = {
+                "p2": int(lite_rg_cfg.get("p2_index", 2)),
+                "p3": int(lite_rg_cfg.get("p3_index", 4)),
+                "p4": int(lite_rg_cfg.get("p4_index", 6)),
+                "backbone_end": int(lite_rg_cfg.get("backbone_end_index", 10)),
+                "n3": int(lite_rg_cfg.get("neck_p3_index", 16)),
+                "n4": int(lite_rg_cfg.get("neck_p4_index", 19)),
+            }
+            invalid = {name: index for name, index in indices.items() if not 0 <= index < len(self.model)}
+            if invalid:
+                raise ValueError(f"Invalid LiteRG layer indices: {invalid} for a {len(self.model)}-layer model.")
+            if not indices["p2"] < indices["p3"] < indices["p4"] <= indices["backbone_end"]:
+                raise ValueError(f"LiteRG backbone indices are not ordered: {indices}.")
+            if not indices["backbone_end"] < indices["n3"] < indices["n4"] < len(self.model) - 1:
+                raise ValueError(f"LiteRG neck indices are not ordered before Detect: {indices}.")
+            if indices["p3"] not in self.save or indices["p4"] not in self.save:
+                raise ValueError("LiteRG P3/P4 sources must be saved by the original YOLO neck routes.")
+            channels = {
+                name: self.model[index].out_channels for name, index in indices.items() if name != "backbone_end"
+            }
+            if not all(isinstance(value, int) for value in channels.values()):
+                raise TypeError(f"LiteRG expects tensor feature channels, got {channels}.")
+            self.lite_rg = ProgressiveLiteRG(
+                channels["p2"],
+                channels["p3"],
+                channels["p4"],
+                channels["n3"],
+                channels["n4"],
+                hidden_channels=int(lite_rg_cfg.get("hidden_channels", 32)),
+                directional_kernel=int(lite_rg_cfg.get("directional_kernel", 9)),
+                use_drg=bool(lite_rg_cfg.get("use_drg", True)),
+                use_rff=bool(lite_rg_cfg.get("use_rff", True)),
+            )
+            self.lite_rg_indices = indices
         self.names = {i: f"{i}" for i in range(self.yaml["nc"])}  # default names dict
         self.inplace = self.yaml.get("inplace", True)
 
@@ -537,6 +578,57 @@ class DetectionModel(BaseModel):
     def end2end(self):
         """Return whether the model uses end-to-end NMS-free detection."""
         return getattr(self.model[-1], "end2end", False)
+
+    def _predict_once(self, x, profile=False, visualize=False, embed=None):
+        """Run one forward pass, optionally inserting YOLO26-native LiteRG guidance."""
+        if self.lite_rg is None:
+            return super()._predict_once(x, profile, visualize, embed)
+
+        y, dt, embeddings = [], [], []
+        embed = frozenset(embed) if embed is not None else {-1}
+        max_idx = max(embed)
+        indices = self.lite_rg_indices
+        source_indices = {indices["p2"], indices["p3"], indices["p4"]}
+        source_features = {}
+        residual3 = residual4 = region_logits = None
+
+        for m in self.model:
+            if m.f != -1:
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]
+            if profile:
+                self._profile_one_layer(m, x, dt)
+            x = m(x)
+
+            if m.i in source_indices:
+                source_features[m.i] = x
+            if m.i == indices["backbone_end"]:
+                p3, p4, residual3, residual4, region_logits = self.lite_rg.guide_backbone(
+                    source_features[indices["p2"]],
+                    source_features[indices["p3"]],
+                    source_features[indices["p4"]],
+                )
+                y[indices["p3"]] = p3
+                y[indices["p4"]] = p4
+            elif m.i == indices["n3"]:
+                x = self.lite_rg.fuse_neck3(x, residual3)
+            elif m.i == indices["n4"]:
+                x = self.lite_rg.fuse_neck4(x, residual4)
+
+            y.append(x if m.i in self.save else None)
+            if visualize:
+                feature_visualization(x, m.type, m.i, save_dir=visualize)
+            if m.i in embed:
+                embeddings.append(torch.nn.functional.adaptive_avg_pool2d(x, (1, 1)).squeeze(-1).squeeze(-1))
+                if m.i == max_idx:
+                    return torch.unbind(torch.cat(embeddings, 1), dim=0)
+
+        if region_logits is None:
+            raise RuntimeError("LiteRG forward completed without producing region logits.")
+        if isinstance(x, dict):
+            x["region_logits"] = region_logits
+        elif isinstance(x, tuple) and len(x) == 2 and isinstance(x[1], dict):
+            x[1]["region_logits"] = region_logits
+        return x
 
     def _predict_augment(self, x):
         """Perform augmentations on input image x and return augmented inference and train outputs.
@@ -604,6 +696,8 @@ class DetectionModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
+        if self.lite_rg is not None:
+            return LiteRGE2ELoss(self) if getattr(self, "end2end", False) else LiteRGDetectionLoss(self)
         return E2ELoss(self) if getattr(self, "end2end", False) else v8DetectionLoss(self)
 
 
@@ -1996,7 +2090,7 @@ def parse_model(d, ch, verbose=True):
         m_ = torch.nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)  # module
         t = str(m)[8:-2].replace("__main__.", "")  # module type
         m_.np = sum(x.numel() for x in m_.parameters())  # number params
-        m_.i, m_.f, m_.type = i, f, t  # attach index, 'from' index, type
+        m_.i, m_.f, m_.type, m_.out_channels = i, f, t, c2  # attach index, routes, type, output channels
         if verbose:
             LOGGER.info(f"{i:>3}{f!s:>20}{n_:>3}{m_.np:10.0f}  {t:<45}{args!s:<30}")  # print
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist

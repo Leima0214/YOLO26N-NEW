@@ -1162,6 +1162,128 @@ class E2ELoss:
         return max(1 - x / max(self.one2one.hyp.epochs - 1, 1), 0) * (self.o2m_copy - self.final_o2m) + self.final_o2m
 
 
+def build_region_targets(
+    batch: dict[str, torch.Tensor],
+    batch_size: int,
+    height: int,
+    width: int,
+    device: torch.device,
+    sigma_scale: float = 0.25,
+    target_mode: str = "soft",
+) -> torch.Tensor:
+    """Rasterize normalized xywh boxes as hard rectangles or morphology-adaptive soft regions."""
+    if target_mode not in {"hard", "soft"}:
+        raise ValueError(f"Region target_mode must be 'hard' or 'soft', got {target_mode!r}.")
+    targets = torch.zeros((batch_size, 1, height, width), device=device, dtype=torch.float32)
+    boxes = batch["bboxes"].to(device=device, dtype=torch.float32)
+    if boxes.numel() == 0:
+        return targets
+    batch_indices = batch["batch_idx"].view(-1).to(device=device, dtype=torch.long)
+    grid_y = torch.arange(height, device=device, dtype=torch.float32).add_(0.5).view(1, height, 1)
+    grid_x = torch.arange(width, device=device, dtype=torch.float32).add_(0.5).view(1, 1, width)
+
+    for image_index in range(batch_size):
+        image_boxes = boxes[batch_indices == image_index]
+        if image_boxes.numel() == 0:
+            continue
+        for box_chunk in image_boxes.split(64):
+            center_x = (box_chunk[:, 0] * width).view(-1, 1, 1)
+            center_y = (box_chunk[:, 1] * height).view(-1, 1, 1)
+            box_width = (box_chunk[:, 2] * width).clamp_min(1.0).view(-1, 1, 1)
+            box_height = (box_chunk[:, 3] * height).clamp_min(1.0).view(-1, 1, 1)
+            sigma_x = (box_width * sigma_scale).clamp_min(0.5)
+            sigma_y = (box_height * sigma_scale).clamp_min(0.5)
+            offset_x = grid_x - center_x
+            offset_y = grid_y - center_y
+            gaussian = torch.exp(-0.5 * ((offset_x / sigma_x).square() + (offset_y / sigma_y).square()))
+            inside_box = (offset_x.abs() <= box_width * 0.5) & (offset_y.abs() <= box_height * 0.5)
+            regions = gaussian * inside_box if target_mode == "soft" else inside_box.float()
+            soft_regions = regions.amax(dim=0, keepdim=True)
+            targets[image_index] = torch.maximum(targets[image_index], soft_regions)
+    return targets
+
+
+class LiteRGRegionLossMixin:
+    """Shared hard/soft region-target and BCE-Dice logic for E2E and one-to-many training."""
+
+    def init_region_loss(self, model) -> None:
+        """Read LiteRG loss settings without changing the native detection criterion."""
+        config = model.yaml.get("lite_rg", {})
+        self.region_gain = float(config.get("region_gain", 0.5))
+        self.region_floor = float(config.get("region_floor", 0.2))
+        self.region_bce = float(config.get("region_bce", 1.0))
+        self.region_dice = float(config.get("region_dice", 1.0))
+        self.sigma_scale = float(config.get("sigma_scale", 0.25))
+        self.region_target_mode = str(config.get("target_mode", "soft")).lower()
+        self.progressive_region = bool(config.get("progressive_region", True))
+        if min(self.region_gain, self.region_floor, self.region_bce, self.region_dice, self.sigma_scale) < 0:
+            raise ValueError("LiteRG loss gains and sigma_scale must be non-negative.")
+        if self.region_target_mode not in {"hard", "soft"}:
+            raise ValueError(f"Unsupported LiteRG target_mode={self.region_target_mode!r}.")
+
+    def region_component(
+        self, parsed: dict[str, torch.Tensor], batch: dict[str, torch.Tensor], schedule: float = 1.0
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calculate the batch-scaled region loss and its unscaled logging item."""
+        region_logits = parsed.get("region_logits")
+        if region_logits is None:
+            raise KeyError("LiteRG predictions must contain 'region_logits'.")
+        logits = region_logits.float()
+        with torch.no_grad():
+            targets = build_region_targets(
+                batch,
+                batch_size=logits.shape[0],
+                height=logits.shape[-2],
+                width=logits.shape[-1],
+                device=logits.device,
+                sigma_scale=self.sigma_scale,
+                target_mode=self.region_target_mode,
+            )
+        bce = F.binary_cross_entropy_with_logits(logits, targets)
+        probabilities = logits.sigmoid()
+        intersection = (probabilities * targets).sum(dim=(1, 2, 3))
+        denominator = probabilities.sum(dim=(1, 2, 3)) + targets.sum(dim=(1, 2, 3))
+        dice = (1.0 - (2.0 * intersection + 1.0) / (denominator + 1.0)).mean()
+        region_loss = self.region_bce * bce + self.region_dice * dice
+        scheduled_gain = self.region_gain * (max(schedule, self.region_floor) if self.progressive_region else 1.0)
+        weighted_region = region_loss * scheduled_gain
+        return weighted_region * logits.shape[0], weighted_region.detach()
+
+
+class LiteRGE2ELoss(LiteRGRegionLossMixin, E2ELoss):
+    """Keep YOLO26 E2E loss intact and append progressive BCE-Dice region supervision."""
+
+    def __init__(self, model):
+        E2ELoss.__init__(self, model)
+        self.init_region_loss(model)
+
+    def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return the native three E2E losses plus a fourth scheduled region-loss component."""
+        parsed = self.one2many.parse_output(preds)
+        detection_loss, detection_items = E2ELoss.__call__(self, parsed, batch)
+        region_loss, region_item = self.region_component(parsed, batch, schedule=self.o2m)
+        return torch.cat((detection_loss, region_loss.reshape(1))), torch.cat(
+            (detection_items, region_item.reshape(1))
+        )
+
+
+class LiteRGDetectionLoss(LiteRGRegionLossMixin, v8DetectionLoss):
+    """Append LiteRG supervision to the native one-to-many detection loss for the B6 comparison."""
+
+    def __init__(self, model):
+        v8DetectionLoss.__init__(self, model)
+        self.init_region_loss(model)
+
+    def __call__(self, preds: Any, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return native one-to-many losses plus a fourth region-loss component."""
+        parsed = self.parse_output(preds)
+        detection_loss, detection_items = v8DetectionLoss.__call__(self, parsed, batch)
+        region_loss, region_item = self.region_component(parsed, batch)
+        return torch.cat((detection_loss, region_loss.reshape(1))), torch.cat(
+            (detection_items, region_item.reshape(1))
+        )
+
+
 class TVPDetectLoss:
     """Criterion class for computing training losses for text-visual prompt detection."""
 
