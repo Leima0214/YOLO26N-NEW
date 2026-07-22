@@ -202,10 +202,13 @@ def main() -> None:
     if not args.config.is_file():
         raise FileNotFoundError(args.config)
     config = YAML.load(args.config)
-    data = (args.data or ROOT / config.pop("data")).resolve()
-    weights = (args.weights or ROOT / config.pop("weights")).resolve()
+    config_data = config.pop("data")
+    config_weights = config.pop("weights")
+    data = (args.data or ROOT / config_data).resolve()
+    weights = (args.weights or ROOT / config_weights).resolve()
     project = (ROOT / config.pop("project")).resolve()
     split_status = config.pop("split_status")
+    assert not {"data", "weights", "project", "split_status", "resume"} & config.keys()
     if args.device is not None:
         config["device"] = args.device
     if args.name is not None:
