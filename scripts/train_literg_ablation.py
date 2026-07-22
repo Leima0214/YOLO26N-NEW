@@ -51,13 +51,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--name", default=None)
+    parser.add_argument(
+        "--region-gain",
+        type=float,
+        default=None,
+        help="Override only lite_rg.region_gain; leave unset to use the model YAML value.",
+    )
     return parser.parse_args()
 
 
-def build_model(stage: str) -> YOLO:
+def build_model(stage: str, region_gain: float | None = None) -> YOLO:
     """Build B0 directly or materialize a short-lived YAML for one controlled LiteRG ablation."""
     if stage == "B0":
+        if region_gain is not None:
+            raise ValueError("--region-gain is only valid for LiteRG stages B1-B7.")
         return YOLO(str(BASELINE_MODEL))
+    if region_gain is not None and region_gain < 0:
+        raise ValueError(f"--region-gain must be non-negative, got {region_gain}.")
 
     assert LITERG_MODEL.is_file(), LITERG_MODEL
     config = YAML.load(LITERG_MODEL)
@@ -65,6 +75,8 @@ def build_model(stage: str) -> YOLO:
     stage_config = dict(STAGES[stage])
     config["end2end"] = bool(stage_config.pop("end2end", True))
     config["lite_rg"].update(stage_config)
+    if region_gain is not None:
+        config["lite_rg"]["region_gain"] = region_gain
     handle = tempfile.NamedTemporaryFile(prefix="yolo26n-literg-", suffix=".yaml", delete=False)
     temporary_yaml = Path(handle.name)
     handle.close()
@@ -84,7 +96,7 @@ def build_model(stage: str) -> YOLO:
 
 def main() -> None:
     args = parse_args()
-    model = build_model(args.stage)
+    model = build_model(args.stage, args.region_gain)
     model.load(args.weights)
     run_name = args.name or f"literg_{args.stage.lower()}_japan7_{args.epochs}e_seed{args.seed}"
     model.train(
