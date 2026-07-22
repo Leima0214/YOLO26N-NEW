@@ -102,6 +102,10 @@ def make_trainer(core: torch.nn.Module, checkpoint: Path, data: Path, device: st
         }
     )
     trainer.model = core.to(trainer.device)
+    # strip_optimizer() freezes checkpoint tensors; DetectionTrainer normally reverses this in _setup_train().
+    for parameter in core.parameters():
+        if parameter.dtype.is_floating_point:
+            parameter.requires_grad_(True)
     trainer.set_model_attributes()
     trainer.stride = max(int(core.stride.max()), 32)
     loader = trainer.get_dataloader(trainer.data["train"], batch_size=batch_size, rank=-1, mode="train")
