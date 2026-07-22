@@ -11,6 +11,7 @@ import subprocess
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import torch
@@ -339,23 +340,26 @@ def gap_analysis(checkpoint: Path, data: Path, device: str, batch_size: int, wor
 
 def evaluate_baseline(checkpoint: Path, data: Path, output: Path, args) -> dict:
     model = YOLO(str(checkpoint))
-    result = model.val(
-        data=str(data),
-        split="val",
-        imgsz=args.imgsz,
-        batch=args.batch,
-        device=args.device,
-        workers=args.workers,
-        conf=args.eval_conf,
-        iou=args.iou,
-        max_det=args.max_det,
-        plots=False,
-        project=str(output / "validation"),
-        name="b0_one_to_one",
-        exist_ok=False,
-        verbose=False,
-    )
-    return metrics_payload(result, {int(key): value for key, value in model.names.items()})
+    with patch.object(type(model.model), "fuse", lambda self, verbose=True: self):
+        result = model.val(
+            data=str(data),
+            split="val",
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+            workers=args.workers,
+            conf=args.eval_conf,
+            iou=args.iou,
+            max_det=args.max_det,
+            plots=False,
+            project=str(output / "validation"),
+            name="b0_one_to_one",
+            exist_ok=False,
+            verbose=False,
+        )
+    payload = metrics_payload(result, {int(key): value for key, value in model.names.items()})
+    payload["runtime_fusion_disabled"] = True
+    return payload
 
 
 def delta(left: dict, right: dict) -> dict:

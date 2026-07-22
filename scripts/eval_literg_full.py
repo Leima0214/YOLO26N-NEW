@@ -9,6 +9,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -58,22 +59,25 @@ def evaluate(checkpoint: Path, data: Path, branch: str, args) -> dict:
         raise RuntimeError("LiteRG is missing after independent checkpoint load.")
     if branch == "one_to_many":
         use_one_to_many(model)
-    result = model.val(
-        data=str(data),
-        split="val",
-        imgsz=args.imgsz,
-        batch=args.batch,
-        device=args.device,
-        workers=args.workers,
-        iou=args.iou,
-        max_det=args.max_det,
-        plots=args.plots,
-        project=str(args.output / "validation"),
-        name=branch,
-        exist_ok=True,
-        verbose=False,
-    )
-    return metrics_payload(result, {int(key): value for key, value in model.names.items()})
+    with patch.object(type(model.model), "fuse", lambda self, verbose=True: self):
+        result = model.val(
+            data=str(data),
+            split="val",
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+            workers=args.workers,
+            iou=args.iou,
+            max_det=args.max_det,
+            plots=args.plots,
+            project=str(args.output / "validation"),
+            name=branch,
+            exist_ok=True,
+            verbose=False,
+        )
+    payload = metrics_payload(result, {int(key): value for key, value in model.names.items()})
+    payload["runtime_fusion_disabled"] = True
+    return payload
 
 
 def check_fused_export(checkpoint: Path, output: Path, device: str, imgsz: int) -> dict:
